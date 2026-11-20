@@ -1,0 +1,439 @@
+import { useState } from 'react';
+import { Badge, Card, DaysLeft, StageBadge, TierBadge } from '../components';
+import { COMPANY } from '../data/seed';
+import type { Contract, TermKey } from '../data/types';
+import { addDays, diffDays, fmt, type ISODate } from '../lib/dates';
+import {
+  last12Spend,
+  money,
+  person,
+  rateCheck,
+  recommend,
+  supplierOf,
+  TERM_LABEL,
+  tierOf,
+  type Decision,
+  type DateResult,
+} from '../lib/logic';
+import { useStore, type DecisionRecord, type Row } from '../store';
+
+const ACTIONS: { k: Decision; label: string; desc: string }[] = [
+  { k: 'renew', label: 'Renew', desc: 'Keep it as is' },
+  { k: 'renegotiate', label: 'Renegotiate', desc: 'Notice, then new terms' },
+  { k: 'reduce', label: 'Reduce', desc: 'Cut scope or seats' },
+  { k: 'exit', label: 'Exit', desc: 'Do not renew' },
+];
+
+const KEY_TERMS: TermKey[] = ['end', 'renewal', 'notice', 'tfc', 'priceIncrease', 'minCommit', 'noticeAddress'];
+
+function needsNotice(c: Contract, d: Decision) {
+  if (d === 'renew') return false;
+  if (c.dates.type === 'fixed') return false;
+  return true;
+}
+
+function approverFor(c: Contract) {
+  const t = tierOf(c);
+  if (t === 'small') return { who: "Legal's standing template", id: 'template' };
+  if (t === 'mid') return { who: `${person('p-proc')!.name} (Procurement)`, id: 'p-proc' };
+  return { who: `${person('p-legal')!.name} (Legal)`, id: 'p-legal' };
+}
+
+function letterText(c: Contract, dr: DateResult, d: Decision, sendOn: ISODate) {
+  const s = supplierOf(c);
+  const noticeQuote = c.terms.find((t) => t.key === 'notice')!.quote;
+  const addr = c.terms.find((t) => t.key === 'noticeAddress')!.value;
+  const evergreenEnd = c.dates.type === 'evergreen' ? addDays(sendOn, c.dates.noticeDays!) : null;
+  const intent =
+    c.dates.type === 'evergreen'
+      ? `gives notice of termination of the Agreement, effective ${fmt(evergreenEnd)} (${c.dates.noticeDays} days from the date of this notice)`
+      : `gives notice that it will not renew the Agreement at the end of the current term on ${fmt(dr.termEnd)}`;
+  const tail =
+    d === 'renegotiate'
+      ? `\n\n${COMPANY} would like to continue working with ${s.name} and invites a proposal on revised terms before that date.`
+      : d === 'reduce'
+        ? `\n\n${COMPANY} is open to continuing on a reduced scope and invites a proposal on that basis.`
+        : '';
+  return `${fmt(sendOn)}
+
+To: ${s.name}
+Delivery: ${addr}
+
+Re: ${c.title}
+
+In accordance with the Agreement — "${noticeQuote}" — ${COMPANY} hereby ${intent}.${tail}
+
+${person('p-proc')!.name}
+${person('p-proc')!.title}, ${COMPANY}
+Sent from the procurement mailbox.`;
+}
+
+export default function Brief({ id }: { id: string }) {
+  const { rows, now, go, records, setRecord } = useStore();
+  const r = rows.find((x) => x.c.id === id);
+  const [choice, setChoice] = useState<Decision | null>(null);
+  const [reason, setReason] = useState('');
+  if (!r) return <p>Contract not found.</p>;
+  const { c, dr, owner } = r;
+  const rec = records[c.id];
+  const s = supplierOf(c);
+  const tier = tierOf(c);
+  const rc = rateCheck(c);
+  const reco = recommend(c);
+  const spend = last12Spend(c);
+  const autoRenewPrice = Math.round(spend * (1 + c.priceIncreasePct / 100));
+  const picked = choice ?? reco.action;
+  const overriding = picked !== reco.action;
+
+  const decide = (protective = false) => {
+    const d: Decision = protective ? 'renegotiate' : picked;
+    const r2: DecisionRecord = {
+      decision: d,
+      recommended: reco.action,
+      overrideReason: overriding && !protective ? reason.trim() : undefined,
+      decidedOn: now,
+      decidedBy: protective ? `${person('p-proc')!.name} (protective notice)` : owner.owner.name,
+      protective,
+    };
+    if (needsNotice(c, d)) {
+      r2.letter = tier === 'small' ? { status: 'approved', approvedBy: "Legal's standing template", approvedOn: now } : { status: 'drafted' };
+    }
+    setRecord(c.id, r2);
+  };
+
+  const update = (patch: Partial<DecisionRecord>) => setRecord(c.id, { ...rec!, ...patch });
+
+  const inWindow = !dr.noticeDeadline || (now >= dr.windowOpen! && now <= dr.noticeDeadline);
+  const windowNotOpen = !!dr.noticeDeadline && now < dr.windowOpen!;
+  const windowClosed = !!dr.noticeDeadline && now > dr.noticeDeadline;
+  const canProtect = !rec && tier === 'large' && !c.critical && c.renewOnNewTermsAfterNotice && (r.stage === 'takeover' || r.stage === 'overdue') && !!dr.noticeDeadline;
+
+  return (
+    <div className="stack brief">
+      <button className="link back" onClick={() => go('contract/' + c.id)}>
+        ← Contract record
+      </button>
+      <div className="rec-head">
+        <div>
+          <p className="eyebrow">Owner brief · one page</p>
+          <h1>{s.name}</h1>
+          <p className="muted">
+            For <b>{owner.owner.name}</b> ({owner.owner.title}), budget owner of {owner.costCentre}. Consulted: {owner.approver.name}.
+          </p>
+          <div className="row gap">
+            <TierBadge tier={tier} />
+            <StageBadge stage={r.stage} />
+            {r.sch.triage && <Badge tone="red">Triage</Badge>}
+          </div>
+        </div>
+        <div className="decide-box">
+          <div className="muted sm">Decide by</div>
+          <DaysLeft date={dr.decideBy} now={now} />
+          {dr.noticeDeadline && (
+            <div className="muted sm">
+              Send window {fmt(dr.windowOpen)} – {fmt(dr.noticeDeadline)}
+            </div>
+          )}
+        </div>
+      </div>
+
+      <div className="two">
+        <Card title="Terms in force (after amendments)">
+          <dl className="kv">
+            {KEY_TERMS.map((k) => {
+              const t = c.terms.find((x) => x.key === k)!;
+              const doc = c.docs.find((d) => d.id === t.docId);
+              return (
+                <div key={k}>
+                  <dt>{TERM_LABEL[k]}</dt>
+                  <dd>
+                    {t.value}
+                    {t.quote && (
+                      <div className="cite" title={t.quote}>
+                        “{t.quote.length > 140 ? t.quote.slice(0, 140) + '…' : t.quote}” — {doc?.title}
+                      </div>
+                    )}
+                  </dd>
+                </div>
+              );
+            })}
+          </dl>
+        </Card>
+
+        <div className="stack">
+          <Card title="Price if renewed">
+            <div className="price">
+              <div>
+                <div className="muted sm">Last 12 months of spend</div>
+                <div className="big">{money(spend)}</div>
+              </div>
+              <div className="arrow">→</div>
+              <div>
+                <div className="muted sm">If it auto-renews (+{c.priceIncreasePct}%)</div>
+                <div className="big">{money(autoRenewPrice)}</div>
+              </div>
+            </div>
+            <p className="muted sm">From the price-increase clause applied to actual spend.</p>
+          </Card>
+
+          {c.rateCard && (
+            <Card title="Rate check against the contract" aside={rc.findings.length ? <Badge tone="red">{money(rc.total)} over</Badge> : <Badge tone="green">Clean</Badge>}>
+              {rc.findings.length ? (
+                <>
+                  <p>
+                    {rc.findings.length} invoice lines billed above the rate in force. {rc.findings[0].note}.
+                  </p>
+                  <div className="table-wrap">
+                    <table className="tbl compact">
+                      <thead>
+                        <tr>
+                          <th>Invoice</th>
+                          <th>Role</th>
+                          <th className="num">Billed</th>
+                          <th className="num">Contract</th>
+                          <th className="num">Over</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {rc.findings.map((f) => (
+                          <tr key={f.invoiceId + f.item}>
+                            <td>{fmt(f.date)}</td>
+                            <td>{f.item}</td>
+                            <td className="num">${f.billed.toFixed(2)}</td>
+                            <td className="num">${f.contract.toFixed(2)}</td>
+                            <td className="num">{money(f.overcharge)}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </>
+              ) : (
+                <p className="muted">{rc.checked ? `${rc.checked} invoices checked line by line; all at or below the rate card.` : 'Rate card on file; invoices are billed as totals, so only the total was compared.'}</p>
+              )}
+            </Card>
+          )}
+
+          <Card title="From the invoice approver">
+            {c.approverAnswers ? (
+              <dl className="kv three">
+                <div>
+                  <dt>Do we still use it?</dt>
+                  <dd className="cap">{c.approverAnswers.stillUsed}</dd>
+                </div>
+                <div>
+                  <dt>How is it performing?</dt>
+                  <dd className="cap">{c.approverAnswers.performance}</dd>
+                </div>
+                <div>
+                  <dt>Would we miss it?</dt>
+                  <dd className="cap">{c.approverAnswers.wouldMiss}</dd>
+                </div>
+                {c.approverAnswers.note && <p className="quote-note">“{c.approverAnswers.note}” — {owner.approver.name}</p>}
+              </dl>
+            ) : (
+              <p className="muted">
+                {owner.approver.name} has been asked the three questions; no answer yet.
+              </p>
+            )}
+            {c.serviceCredit && (
+              <div className="note">
+                <b>Service credit:</b> “{c.serviceCredit.clause}”
+                {c.serviceCredit.claimable && (
+                  <>
+                    {' '}
+                    <b className="tone-amber">Could be claimed:</b> {c.serviceCredit.claimable}
+                    {c.serviceCredit.amount ? ` — about ${money(c.serviceCredit.amount)}.` : '.'}
+                  </>
+                )}
+              </div>
+            )}
+          </Card>
+        </div>
+      </div>
+
+      {/* ---------------- Step 1: decide ---------------- */}
+      <Card title="1 · Decision" className={rec ? 'done' : 'active'}>
+        <div className="reco">
+          <div>
+            <div className="muted sm">Default recommendation</div>
+            <div className="reco-a cap">{reco.action}</div>
+          </div>
+          <ul>
+            {reco.reasons.map((x, i) => (
+              <li key={i}>{x}</li>
+            ))}
+          </ul>
+        </div>
+        {rec ? (
+          <div className="note ok">
+            <b className="cap">{rec.decision}</b> — decided by {rec.decidedBy} on {fmt(rec.decidedOn)}
+            {rec.decidedOn <= dr.decideBy ? ' (before the decide-by date)' : ' (after the decide-by date)'}.
+            {rec.overrideReason && <> Override reason: “{rec.overrideReason}”.</>}
+            <button className="link sm" onClick={() => setRecord(c.id, undefined)}>
+              Undo
+            </button>
+          </div>
+        ) : (
+          <>
+            <div className="choices">
+              {ACTIONS.map((a) => (
+                <button key={a.k} className={`choice ${picked === a.k ? 'on' : ''}`} onClick={() => setChoice(a.k)}>
+                  <b>{a.label}</b>
+                  <span>{a.desc}</span>
+                  {reco.action === a.k && <em>recommended</em>}
+                </button>
+              ))}
+            </div>
+            {overriding && (
+              <label className="field">
+                <span>Overriding the recommendation needs a one-line reason</span>
+                <input value={reason} onChange={(e) => setReason(e.target.value)} placeholder="e.g. Ops relies on them for peak season; will renegotiate next year" />
+              </label>
+            )}
+            <div className="row gap">
+              <button className="primary" disabled={overriding && reason.trim().length < 5} onClick={() => decide()}>
+                {tier === 'small' ? `Confirm “${picked}” (one tap)` : `Record decision: ${picked}`}
+              </button>
+              <span className="muted sm">as {owner.owner.name}</span>
+            </div>
+            {canProtect && (
+              <div className="note bad">
+                <b>Nobody has decided and procurement has taken over.</b> This large, non-critical contract allows renewing on new terms after notice, so procurement can
+                send a protective notice of non-renewal to keep leverage while it renegotiates (needs human approval).
+                <div>
+                  <button className="danger sm" onClick={() => decide(true)}>
+                    Draft protective notice
+                  </button>
+                </div>
+              </div>
+            )}
+          </>
+        )}
+      </Card>
+
+      {/* ---------------- Step 2: notice ---------------- */}
+      {rec && (
+        <Card title="2 · Notice to the supplier" className={rec.letter?.status === 'sent' || !rec.letter ? 'done' : 'active'}>
+          {!rec.letter ? (
+            <p className="muted">
+              {rec.decision === 'renew'
+                ? 'Renewing: no notice is sent. The contract renews on its terms.'
+                : 'Fixed term: no notice is needed; it ends on its own. Procurement starts the new agreement or the exit plan.'}
+            </p>
+          ) : (
+            <>
+              <pre className="letter">{letterText(c, dr, rec.decision, rec.letter.sentOn ?? (inWindow ? now : dr.windowOpen ?? now))}</pre>
+              <div className="letter-steps">
+                <div className={`ls ${rec.letter.status !== 'drafted' ? 'ok' : ''}`}>
+                  <b>Approve</b>
+                  {rec.letter.status === 'drafted' ? (
+                    <button
+                      className="primary sm"
+                      onClick={() => update({ letter: { status: 'approved', approvedBy: approverFor(c).who, approvedOn: now } })}
+                    >
+                      Approve as {approverFor(c).who}
+                    </button>
+                  ) : (
+                    <span className="muted sm">
+                      {rec.letter.approvedBy}, {fmt(rec.letter.approvedOn)}
+                    </span>
+                  )}
+                </div>
+                <div className={`ls ${rec.letter.status === 'sent' ? 'ok' : ''}`}>
+                  <b>Send inside the window</b>
+                  {rec.letter.status === 'sent' ? (
+                    <span className="muted sm">Sent {fmt(rec.letter.sentOn)} to the contract's notice address</span>
+                  ) : rec.letter.status === 'approved' && windowNotOpen ? (
+                    <span className="held">
+                      ⏸ Held until the window opens on <b>{fmt(dr.windowOpen)}</b> ({diffDays(dr.windowOpen!, now)} days). Move the slider to release it.
+                    </span>
+                  ) : rec.letter.status === 'approved' && windowClosed ? (
+                    <span className="tone-red sm">Window closed on {fmt(dr.noticeDeadline)} — sending now would be invalid.</span>
+                  ) : rec.letter.status === 'approved' ? (
+                    <button className="primary sm" onClick={() => update({ letter: { ...rec.letter!, status: 'sent', sentOn: now } })}>
+                      {tier === 'small' ? 'DecideBy sends now' : 'Send from procurement mailbox'}
+                    </button>
+                  ) : (
+                    <span className="muted sm">Waiting for approval</span>
+                  )}
+                </div>
+              </div>
+            </>
+          )}
+        </Card>
+      )}
+
+      {/* ---------------- Step 3: outcome ---------------- */}
+      {rec && (!rec.letter || rec.letter.status === 'sent') && <OutcomeStep row={r} autoRenewPrice={autoRenewPrice} />}
+    </div>
+  );
+}
+
+function OutcomeStep({ row, autoRenewPrice }: { row: Row; autoRenewPrice: number }) {
+  const { records, setRecord, now } = useStore();
+  const rec = records[row.c.id]!;
+  const def = rec.decision === 'exit' ? 0 : rec.decision === 'renew' ? autoRenewPrice : Math.round(autoRenewPrice * 0.94);
+  const [price, setPrice] = useState(String(rec.outcome?.newAnnual ?? def));
+  const [term, setTerm] = useState(String(rec.outcome?.termMonths ?? (rec.decision === 'exit' ? 0 : 12)));
+  const [note, setNote] = useState(rec.outcome?.note ?? '');
+  const savings = autoRenewPrice - Number(price || 0);
+
+  if (rec.outcome)
+    return (
+      <Card title="3 · Outcome recorded" className="done">
+        <div className="stats">
+          <div className="stat">
+            <div className="stat-l">New annual price</div>
+            <div className="stat-v">{money(rec.outcome.newAnnual)}</div>
+          </div>
+          <div className="stat">
+            <div className="stat-l">Term</div>
+            <div className="stat-v">{rec.outcome.termMonths ? `${rec.outcome.termMonths} mo` : 'Ended'}</div>
+          </div>
+          <div className="stat stat-accent">
+            <div className="stat-l">Savings vs auto-renewal</div>
+            <div className="stat-v">{money(rec.outcome.savings)}</div>
+          </div>
+        </div>
+        {rec.outcome.note && <p className="muted">“{rec.outcome.note}”</p>}
+        <p className="note ok">Recorded {fmt(rec.outcome.recordedOn)}. Next year's brief starts from this outcome.</p>
+        <button className="link sm" onClick={() => setRecord(row.c.id, { ...rec, outcome: undefined })}>
+          Edit outcome
+        </button>
+      </Card>
+    );
+
+  return (
+    <Card title="3 · Record the outcome" className="active">
+      <div className="form-row">
+        <label className="field">
+          <span>New annual price ($)</span>
+          <input type="number" value={price} onChange={(e) => setPrice(e.target.value)} />
+        </label>
+        <label className="field">
+          <span>New term (months, 0 if ended)</span>
+          <input type="number" value={term} onChange={(e) => setTerm(e.target.value)} />
+        </label>
+        <label className="field grow">
+          <span>Note</span>
+          <input value={note} onChange={(e) => setNote(e.target.value)} placeholder="e.g. 6% increase withdrawn; overcharge credited" />
+        </label>
+      </div>
+      <p>
+        Auto-renewal price {money(autoRenewPrice)} → savings <b className={savings >= 0 ? 'tone-green' : 'tone-red'}>{money(savings)}</b> a year.
+      </p>
+      <button
+        className="primary"
+        onClick={() =>
+          setRecord(row.c.id, {
+            ...rec,
+            outcome: { newAnnual: Number(price || 0), termMonths: Number(term || 0), autoRenewPrice, savings, note, recordedOn: now },
+          })
+        }
+      >
+        Record outcome
+      </button>
+    </Card>
+  );
+}
