@@ -105,7 +105,7 @@ export default function Evaluation() {
 
       <Card title="Test 1 · Reading single contracts (CUAD)" aside={<Badge tone="amber">Not run in this build</Badge>}>
         <p>
-          Planned: about 100 <a href="https://www.atticusprojectai.org/cuad" target="_blank" rel="noreferrer">CUAD</a> contracts labelled by lawyers (CC BY 4.0). Measures
+          Planned: about 100 <a href="https://huggingface.co/datasets/theatticusproject/cuad" target="_blank" rel="noreferrer">CUAD</a> contracts labelled by lawyers (CC BY 4.0). Measures
           accuracy per term and how often "not found" was correct. The bar is reported with its margin of error: 95% on 100 contracts means the true figure is roughly
           89–98%.
         </p>

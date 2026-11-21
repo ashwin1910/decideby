@@ -26,6 +26,36 @@ function T({ head, rows }: { head: string[]; rows: ReactNode[][] }) {
   );
 }
 
+const SRC = {
+  worldcc: 'https://procurementandsupply.com/procurement-contracts-leaking-11-percent-of-value-due-to-enterprise-wide-failures/',
+  agiloft: 'https://www.cfo.com/news/one-in-10-chief-procurement-officers-have-no-shared-metrics-with-cfos-agiloft/830524/',
+  unit4: 'https://scanmarket.unit4.com/blog/contract-management-overlooked-value-driver',
+  apexCase: 'https://www.apexanalytix.com/resources/client-case-study/contract-compliance-audit-oil-gas-company/',
+  apexReport: 'https://www.apexanalytix.com/resources/blog/apexanalytix-2026-global-overpayment-report/',
+  beacon: 'https://beacon.com/resources/how-to-check-freight-invoice-overcharges',
+  vertice: 'https://www.vertice.one/insights/auto-renewal-clauses',
+  zylo: 'https://zylo.com/blog/saas-pricing-trends',
+  sirionManage: 'https://www.sirion.ai/platform/manage/',
+  sirionPlatform: 'https://www.sirion.ai/platform/',
+  sirionPlatformNew: 'https://www.sirion.ai/platform-new',
+  sirionGuide: 'https://www.sirion.ai/fr/library/contract-negotiation/contract-renewal-process/',
+  omneaJobber: 'https://www.omnea.co/customer-stories/jobber',
+  omneaRenewal: 'https://omnea.co/products/renewal-management',
+  tropic: 'https://www.tropicapp.io/blog/spend-management-beyond-saas',
+  docusign: 'https://www.docusign.com/blog/find-savings-in-vendor-agreements-with-ai-powered-analysis',
+  cuad: 'https://huggingface.co/datasets/theatticusproject/cuad',
+  legalbench: 'https://hazyresearch.stanford.edu/legalbench/tasks/cuad_notice_period_to_terminate_renewal.html',
+};
+
+/** An external source link that opens in a new tab. */
+function L({ href, children }: { href: string; children: ReactNode }) {
+  return (
+    <a href={href} target="_blank" rel="noreferrer">
+      {children}
+    </a>
+  );
+}
+
 export default function Case() {
   return (
     <div className="stack case">
@@ -86,14 +116,14 @@ export default function Case() {
         <T
           head={['Evidence', 'Figure', 'Supplier types', 'Source']}
           rows={[
-            ['Value lost after signing', '11% of contract value; poor renewal planning about 2–3%', 'All', 'WorldCC and Ironclad'],
-            ['Remedies not collected', "52% failed to collect a contractual remedy in the past year because it wasn't tracked (2,005 leaders)", 'All', 'Agiloft 2026 survey'],
-            ['Agreed rates hard to find', '56% struggle to find approved vendor terms or rate cards, leading to overpayment', 'All', 'Unit4 Scanmarket'],
-            ['Staffing bills drift', 'Higher-rate job classes billed for lower-rate work; more hours than timekeeping showed', 'Staffing', 'apexanalytix case study'],
-            ['Freight bills drift', 'Overcharges of 8–10% of invoiced value; ~1 in 5 invoices flagged', 'Logistics', 'Beacon'],
-            ['Pricing errors in AP', '13% of lost profit', 'All', 'apexanalytix 2026 Global Overpayment Report'],
-            ['Small renewals unreviewed', '70% of tail-spend renewals had no review vs 14.6% of larger', 'Software', 'Vertice'],
-            ['Price rises at renewal', '79% of IT leaders faced increases in the past 12 months', 'Software', 'Zylo'],
+            ['Value lost after signing', '11% of contract value; poor renewal planning about 2–3%', 'All', <L href={SRC.worldcc}>WorldCC and Ironclad</L>],
+            ['Remedies not collected', "52% failed to collect a contractual remedy in the past year because it wasn't tracked (2,005 leaders)", 'All', <L href={SRC.agiloft}>Agiloft 2026 survey</L>],
+            ['Agreed rates hard to find', '56% struggle to find approved vendor terms or rate cards, leading to overpayment', 'All', <L href={SRC.unit4}>Unit4 Scanmarket</L>],
+            ['Staffing bills drift', 'Higher-rate job classes billed for lower-rate work; more hours than timekeeping showed', 'Staffing', <L href={SRC.apexCase}>apexanalytix case study</L>],
+            ['Freight bills drift', 'Overcharges of 8–10% of invoiced value; ~1 in 5 invoices flagged', 'Logistics', <L href={SRC.beacon}>Beacon</L>],
+            ['Pricing errors in AP', '13% of lost profit', 'All', <L href={SRC.apexReport}>apexanalytix 2026 Global Overpayment Report</L>],
+            ['Small renewals unreviewed', '70% of tail-spend renewals had no review vs 14.6% of larger', 'Software', <L href={SRC.vertice}>Vertice</L>],
+            ['Price rises at renewal', '79% of IT leaders faced increases in the past 12 months', 'Software', <L href={SRC.zylo}>Zylo</L>],
           ]}
         />
         <p>
@@ -180,10 +210,10 @@ export default function Case() {
         <T
           head={['Comparable', 'How they do it', 'What DecideBy borrows', 'What is different here']}
           rows={[
-            ['Sirion', 'Conformed contracts, smart renewals, Renewal/Obligations/Invoice agents; renewal guide advising a 3–6 month start', 'Terms in force after amendments; renewal insights; invoice checks; large-tier lead time', 'Coverage against suppliers paid, first-week triage, budget-owner assignment, recorded outcomes'],
-            ['Omnea', 'Renewal as a decision with an owner and timeline; at Jobber renewal assessments fell from 63 to 18.5 days', 'Renewal as a decision; surveys to owners before renewal', 'Owner found from cost centres; deadline shown with its clause; send window enforced'],
-            ['Tropic and Vertice', 'Purchase requests across categories; renewal intelligence built around software', 'More autonomy on small contracts', 'Invoices as the evidence for staffing, facilities, logistics'],
-            ['DocuSign Agreement Manager', 'AI repository tracks renewal dates, SLAs, rebates; alerts before auto-renewals', 'Alerts from extracted dates', 'The alert is where DecideBy starts, not where it stops'],
+            [<L href={SRC.sirionManage}>Sirion</L>, <>Conformed contracts, smart renewals, Renewal/Obligations/Invoice agents; a <L href={SRC.sirionGuide}>renewal guide</L> advising a 3–6 month start</>, 'Terms in force after amendments; renewal insights; invoice checks; large-tier lead time', 'Coverage against suppliers paid, first-week triage, budget-owner assignment, recorded outcomes'],
+            [<L href={SRC.omneaRenewal}>Omnea</L>, <>Renewal as a decision with an owner and timeline; at <L href={SRC.omneaJobber}>Jobber</L> renewal assessments fell from 63 to 18.5 days</>, <>Renewal as a decision; <L href={SRC.omneaRenewal}>surveys to owners</L> before renewal</>, 'Owner found from cost centres; deadline shown with its clause; send window enforced'],
+            [<><L href={SRC.tropic}>Tropic</L> and <L href={SRC.vertice}>Vertice</L></>, 'Purchase requests across categories; renewal intelligence built around software', 'More autonomy on small contracts', 'Invoices as the evidence for staffing, facilities, logistics'],
+            [<L href={SRC.docusign}>DocuSign Agreement Manager</L>, 'AI repository tracks renewal dates, SLAs, rebates; alerts before auto-renewals', 'Alerts from extracted dates', 'The alert is where DecideBy starts, not where it stops'],
           ]}
         />
       </Card>
@@ -196,14 +226,56 @@ export default function Case() {
         <T
           head={['Piece of the prototype', 'In production at Sirion']}
           rows={[
-            ['Reading terms; terms in force after amendments', 'Extraction Agent and conformed contracts'],
-            ['Renewal tracking', 'Renewal Agent and smart renewals'],
-            ['Invoice rate check', 'Invoice Agent'],
+            ['Reading terms; terms in force after amendments', <><L href={SRC.sirionPlatform}>Extraction Agent</L> and <L href={SRC.sirionManage}>conformed contracts</L></>],
+            ['Renewal tracking', <><L href={SRC.sirionPlatformNew}>Renewal Agent</L> and smart renewals</>],
+            ['Invoice rate check', <L href={SRC.sirionPlatform}>Invoice Agent</L>],
             ['Search and questions', 'Search Agent and AskSirion'],
             ['Coverage against suppliers paid, first-week triage, budget-owner assignment, send-window hold, recorded outcomes', "DecideBy's contribution"],
           ]}
         />
         <p className="muted sm">This mapping is a reading of Sirion's public pages; corrections welcome.</p>
+      </Card>
+
+      <Card title="Sources">
+        <ul className="sources-list">
+          <li>
+            Sirion: <L href={SRC.sirionManage}>Manage page</L>, <L href={SRC.sirionPlatform}>platform page</L>,{' '}
+            <L href={SRC.sirionPlatformNew}>platform-new page (Renewal Agent)</L>, <L href={SRC.sirionGuide}>renewal process guide</L>
+          </li>
+          <li>
+            Omnea: <L href={SRC.omneaJobber}>Jobber case study</L>, <L href={SRC.omneaRenewal}>renewal management</L>
+          </li>
+          <li>
+            <L href={SRC.tropic}>Tropic: all spend categories</L>
+          </li>
+          <li>
+            <L href={SRC.vertice}>Vertice: auto-renewal and tail spend</L>
+          </li>
+          <li>
+            <L href={SRC.zylo}>Zylo: SaaS pricing trends</L>
+          </li>
+          <li>
+            <L href={SRC.docusign}>DocuSign: renewal tracking</L>
+          </li>
+          <li>
+            <L href={SRC.worldcc}>WorldCC and Ironclad: 11% value leakage</L>
+          </li>
+          <li>
+            <L href={SRC.agiloft}>Agiloft 2026 procurement survey, via CFO.com</L>
+          </li>
+          <li>
+            <L href={SRC.unit4}>Unit4 Scanmarket: contract management</L>
+          </li>
+          <li>
+            apexanalytix: <L href={SRC.apexReport}>2026 Global Overpayment Report</L>, <L href={SRC.apexCase}>contracted-labour audit case study</L>
+          </li>
+          <li>
+            <L href={SRC.beacon}>Beacon: freight invoice overcharges</L>
+          </li>
+          <li>
+            CUAD: <L href={SRC.cuad}>dataset</L>, <L href={SRC.legalbench}>LegalBench notice-period task</L>
+          </li>
+        </ul>
       </Card>
     </div>
   );

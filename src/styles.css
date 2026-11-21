@@ -407,3 +407,4 @@ details.section[open] > summary h3::before { transform: rotate(90deg); }
 }
 .queue .badge { white-space: nowrap; }
 .doc.prompt { max-height: none; white-space: pre-wrap; }
+.sources-list { margin: 0; padding-left: 20px; display: flex; flex-direction: column; gap: 4px; font-size: 13.5px; }
