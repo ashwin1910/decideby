@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
+import { createContext, Fragment, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { CONTRACTS, GO_LIVE } from './data/seed';
 import type { Contract } from './data/types';
 import { addDays, type ISODate } from './lib/dates';
@@ -46,7 +46,19 @@ interface Store {
 }
 
 const Ctx = createContext<Store>(null!);
+export const STORAGE_PREFIX = 'decideby.';
 const KEY = 'decideby.records.v1';
+
+/** Remove every key this app has ever written, whatever its version suffix. */
+export function clearPersisted() {
+  try {
+    Object.keys(localStorage)
+      .filter((k) => k.startsWith(STORAGE_PREFIX))
+      .forEach((k) => localStorage.removeItem(k));
+  } catch {
+    /* storage unavailable */
+  }
+}
 
 function load(): Record<string, DecisionRecord> {
   try {
@@ -68,6 +80,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const [offset, setOffset] = useState(0);
   const [records, setRecords] = useState<Record<string, DecisionRecord>>(load);
   const [route, setRoute] = useState(parseHash);
+  // Bumped by Reset so every view remounts and drops its local state too.
+  const [epoch, setEpoch] = useState(0);
 
   useEffect(() => {
     const f = () => {
@@ -80,7 +94,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     try {
-      localStorage.setItem(KEY, JSON.stringify(records));
+      if (Object.keys(records).length) localStorage.setItem(KEY, JSON.stringify(records));
+      else localStorage.removeItem(KEY);
     } catch {
       /* storage unavailable: state lives for this visit only */
     }
@@ -110,8 +125,11 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         return next;
       }),
     reset: () => {
+      clearPersisted();
       setRecords({});
       setOffset(0);
+      setEpoch((e) => e + 1);
+      if (location.hash !== '#/triage') location.hash = '#/triage';
     },
     rows,
     route,
@@ -119,7 +137,11 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       location.hash = '#/' + p;
     },
   };
-  return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
+  return (
+    <Ctx.Provider value={value}>
+      <Fragment key={epoch}>{children}</Fragment>
+    </Ctx.Provider>
+  );
 }
 
 export const useStore = () => useContext(Ctx);
