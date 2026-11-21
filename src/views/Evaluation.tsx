@@ -54,7 +54,7 @@ export default function Evaluation() {
         <h1>A deadline that comes out too late costs a whole renewal. So the too-late rate is shown first.</h1>
       </div>
 
-      <Card title="Test 2 · Deadlines across contract families" aside={<span className="muted sm">Run live in your browser against the answer key</span>}>
+      <Card title="Test 2 · Deadlines across contract families" aside={<span className="muted sm">Runs in your browser against the answer key</span>}>
         <div className="stats">
           <Stat label="Too-late deadlines (dangerous)" value={late} tone={late ? 'bad' : 'good'} sub={late ? 'DecideBy is not trusted to go first' : 'Bar met: zero too-late'} />
           <Stat label="Too-early" value={early} sub="costs a few weeks of attention" />
@@ -107,16 +107,16 @@ export default function Evaluation() {
         </p>
       </Card>
 
-      <Card title="Test 1 · Reading single contracts (CUAD)" aside={<Badge tone="amber">Not run in this build</Badge>}>
+      <Card title="Test 1 · Reading single contracts (CUAD)" aside={<Badge tone="amber">Planned, not run in this prototype</Badge>}>
         <p>
           Planned: about 100 <a href="https://www.atticusprojectai.org/cuad" target="_blank" rel="noreferrer">CUAD</a> contracts labelled by lawyers (CC BY 4.0). Measures
           accuracy per term and how often "not found" was correct. The bar is reported with its margin of error: 95% on 100 contracts means the true figure is roughly
           89–98%.
         </p>
         <p className="muted sm">
-          No accuracy figure is shown here because the extraction run has not been done; the seeded repository uses pre-computed results.
+          Planned, not run in this prototype, so no accuracy figure is shown. The seeded repository uses pre-computed AI extraction.
         </p>
-        <h4>Quote check across the seeded repository (live)</h4>
+        <h4>Quote check across the seeded repository (runs in your browser)</h4>
         <div className="stats">
           <Stat label="Terms extracted" value={allTerms.length} />
           <Stat label="Quote found verbatim" value={verified} tone="good" />

@@ -169,6 +169,7 @@ export default function Case() {
             ['Renewal decision loop, triage to outcome', 'In, end to end', 'Renewal is when the company has leverage'],
             ['Invoice rate check', 'Narrowed to contracts with a rate card', 'Others have no unit price to check'],
             ['Supplier performance', "Narrowed to the approver's answers and service-credit clauses", 'No SLA data in an email-and-Excel company'],
+            ['AI extraction of terms', 'Pre-computed; replayed in the demo', 'In production an LLM (e.g. Claude) reads each document; the quote check and date maths already run in code'],
             ['Connecting Drive, mailbox, ERP', 'Simulated with seeded files', 'Real logins add demo risk and prove nothing new'],
             ['Drafting and negotiation; intake forms', 'Cut', 'Different stages; help one future contract at a time'],
             ['Live SLA monitoring; supplier portal; non-English', 'Cut', 'Data does not exist yet / not needed to prove the loop'],
