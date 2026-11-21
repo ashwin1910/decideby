@@ -1,6 +1,13 @@
-// Vercel serverless function: reads one contract family with Claude and returns
-// the ~14 terms as strict JSON. The API key never leaves the server.
-import Anthropic from '@anthropic-ai/sdk';
+// Vercel serverless function: reads one contract family with Google Gemini and
+// returns the ~14 terms as strict JSON. The API key never leaves the server.
+//
+// Env vars (set in Vercel → Settings → Environment Variables):
+//   GEMINI_API_KEY  required — from Google AI Studio (aistudio.google.com)
+//   GEMINI_MODEL    optional — defaults to DEFAULT_MODEL below
+
+const DEFAULT_MODEL = 'gemini-2.5-flash';
+const TIMEOUT_MS = 18_000;
+const MAX_CHARS = 60_000;
 
 const TERM_KEYS = [
   'parties', 'effective', 'end', 'renewal', 'notice', 'tfc', 'priceIncrease',
@@ -24,28 +31,33 @@ const TERM_HELP: Record<(typeof TERM_KEYS)[number], string> = {
   noticeAddress: 'where and by what method notices must be delivered',
 };
 
-const SCHEMA = {
-  type: 'object',
-  additionalProperties: false,
+// Gemini structured output: an OpenAPI-style schema the response must follow.
+const RESPONSE_SCHEMA = {
+  type: 'OBJECT',
   required: ['terms'],
   properties: {
     terms: {
-      type: 'array',
+      type: 'ARRAY',
       items: {
-        type: 'object',
-        additionalProperties: false,
+        type: 'OBJECT',
         required: ['key', 'value', 'quote', 'docId', 'confidence'],
         properties: {
-          key: { type: 'string', enum: [...TERM_KEYS] },
-          value: { type: 'string', description: 'Short plain-English value of the term' },
-          quote: { type: 'string', description: 'Exact verbatim sentence from the document, or "" if not found' },
-          docId: { type: 'string', description: 'id of the document the quote comes from, or ""' },
-          confidence: { type: 'number', description: '0 to 1' },
+          key: { type: 'STRING', enum: [...TERM_KEYS] },
+          value: { type: 'STRING', description: 'Short plain-English value of the term' },
+          quote: { type: 'STRING', description: 'Exact verbatim sentence from the document, or "" if not found' },
+          docId: { type: 'STRING', description: 'id of the document the quote comes from, or ""' },
+          confidence: { type: 'NUMBER', description: '0 to 1' },
         },
       },
     },
   },
-} as const;
+};
+
+const SYSTEM =
+  'You extract terms from a supplier contract family (a signed agreement plus any amendments). ' +
+  'Later-signed amendments override the original agreement. For every term, copy the supporting sentence ' +
+  'exactly as written - character for character - into "quote", and give the id of the document it came from. ' +
+  'If a term is not in any document, set quote and docId to "" and confidence low. Never invent text.';
 
 interface InDoc {
   id: string;
@@ -55,13 +67,19 @@ interface InDoc {
   text: string;
 }
 
-const MAX_CHARS = 60_000;
+interface GeminiResponse {
+  candidates?: { content?: { parts?: { text?: string }[] }; finishReason?: string }[];
+  promptFeedback?: { blockReason?: string };
+  modelVersion?: string;
+}
 
 const json = (status: number, body: unknown) =>
   new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
 
 export async function POST(request: Request): Promise<Response> {
-  if (!process.env.ANTHROPIC_API_KEY) return json(503, { error: 'not_configured' });
+  const key = process.env.GEMINI_API_KEY;
+  if (!key) return json(503, { error: 'not_configured' });
+  const model = process.env.GEMINI_MODEL || DEFAULT_MODEL;
 
   let docs: InDoc[];
   try {
@@ -73,39 +91,35 @@ export async function POST(request: Request): Promise<Response> {
   const total = docs.reduce((a, d) => a + d.text.length, 0);
   if (!docs.length || docs.length > 10 || total > MAX_CHARS) return json(400, { error: 'bad_input' });
 
-  const client = new Anthropic({ timeout: 18_000, maxRetries: 0 });
   const documents = docs
     .map((d) => `<document id="${d.id}" kind="${d.kind}" title="${d.title}"${d.signedOn ? ` signed="${d.signedOn}"` : ''}>\n${d.text}\n</document>`)
     .join('\n\n');
+  const prompt =
+    `${documents}\n\nExtract exactly these ${TERM_KEYS.length} terms, one entry each:\n` + TERM_KEYS.map((k) => `- ${k}: ${TERM_HELP[k]}`).join('\n');
 
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), TIMEOUT_MS);
   try {
-    const response = await client.beta.messages.create({
-      model: 'claude-sonnet-5-5',
-      max_tokens: 4000,
-      betas: ['server-side-fallback-2026-07-01'],
-      fallbacks: 'default',
-      output_config: { effort: 'low', format: { type: 'json_schema', schema: SCHEMA } },
-      system:
-        'You extract terms from a supplier contract family (a signed agreement plus any amendments). ' +
-        'Later-signed amendments override the original agreement. For every term, copy the supporting sentence ' +
-        'exactly as written - character for character - into "quote", and give the id of the document it came from. ' +
-        'If a term is not in any document, set quote and docId to "" and confidence low. Never invent text.',
-      messages: [
-        {
-          role: 'user',
-          content:
-            `${documents}\n\nExtract exactly these ${TERM_KEYS.length} terms, one entry each:\n` +
-            TERM_KEYS.map((k) => `- ${k}: ${TERM_HELP[k]}`).join('\n'),
-        },
-      ],
+    const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-goog-api-key': key },
+      body: JSON.stringify({
+        systemInstruction: { parts: [{ text: SYSTEM }] },
+        contents: [{ role: 'user', parts: [{ text: prompt }] }],
+        generationConfig: { temperature: 0, responseMimeType: 'application/json', responseSchema: RESPONSE_SCHEMA },
+      }),
+      signal: ctrl.signal,
     });
-    if (response.stop_reason === 'refusal') return json(502, { error: 'refused' });
-    const text = response.content.flatMap((b) => (b.type === 'text' ? [b.text] : [])).join('');
-    const parsed = JSON.parse(text) as { terms: unknown[] };
-    return json(200, { model: response.model, terms: parsed.terms });
-  } catch (err) {
-    if (err instanceof Anthropic.APIConnectionTimeoutError) return json(504, { error: 'timeout' });
-    if (err instanceof Anthropic.APIError) return json(502, { error: 'upstream', status: err.status });
-    return json(500, { error: 'failed' });
+    if (!res.ok) return json(502, { error: 'upstream', status: res.status });
+    const data = (await res.json()) as GeminiResponse;
+    if (data.promptFeedback?.blockReason) return json(502, { error: 'blocked' });
+    const text = (data.candidates?.[0]?.content?.parts ?? []).map((p) => p.text ?? '').join('');
+    const parsed = JSON.parse(text) as { terms?: unknown[] };
+    if (!Array.isArray(parsed.terms)) return json(502, { error: 'bad_output' });
+    return json(200, { model: data.modelVersion ?? model, terms: parsed.terms });
+  } catch {
+    return json(ctrl.signal.aborted ? 504 : 500, { error: ctrl.signal.aborted ? 'timeout' : 'failed' });
+  } finally {
+    clearTimeout(timer);
   }
 }

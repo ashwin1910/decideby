@@ -28,7 +28,7 @@ describe('live extraction', () => {
   });
 
   it('accepts a good response', async () => {
-    const ok = async () => new Response(JSON.stringify({ model: 'claude-sonnet-5-5', terms: asLive() }), { headers: { 'content-type': 'application/json' } });
+    const ok = async () => new Response(JSON.stringify({ model: 'gemini-2.5-flash', terms: asLive() }), { headers: { 'content-type': 'application/json' } });
     const r = await runLiveExtraction(bright, ok as typeof fetch);
     expect(r.ok && r.rows.every((x) => x.status === 'matched')).toBe(true);
   });

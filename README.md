@@ -29,7 +29,7 @@ The **time slider** in the header moves the simulated date forward from go-live 
 ## What is real and what is simulated
 
 - **Real, running in code:** the date engine (renewal roll-forward, amendments, notice windows, business-day and ambiguous notice periods, the 10-business-day buffer), the quote check, owner assignment from invoice cost centres, tiers and escalation schedules, the rate check, recommendations, search and the deadline evaluation.
-- **Simulated:** connections to Google Drive, the mailbox and the ERP use seeded data. AI extraction results are pre-computed. All companies, people and contracts are synthetic.
+- **Simulated:** connections to Google Drive, the mailbox and the ERP use seeded data. AI extraction results are pre-computed for the demo; "Re-run live" sends a contract family to Google Gemini through a Vercel function (`api/extract.ts`) when `GEMINI_API_KEY` is set. All companies, people and contracts are synthetic.
 - **Not run:** the CUAD extraction-accuracy test.
 
 Decisions are stored in the browser's `localStorage`. Use **Reset demo** to clear them.
@@ -49,4 +49,13 @@ npm run test:deadlines
 
 ## Deploy on Vercel
 
-Import the repository in Vercel. It detects Vite automatically, so the build command is `npm run build` and the output directory is `dist`. `vercel.json` is included. No environment variables are needed.
+Import the repository in Vercel. It detects Vite automatically, so the build command is `npm run build` and the output directory is `dist`. `vercel.json` is included.
+
+To turn on live AI extraction ("Re-run live" on a contract record), add these environment variables in Vercel → Settings → Environment Variables, then redeploy:
+
+| Name | Value |
+| --- | --- |
+| `GEMINI_API_KEY` | an API key from Google AI Studio (aistudio.google.com) |
+| `GEMINI_MODEL` | optional; defaults to `gemini-2.5-flash` |
+
+Without a key the demo still works: "Re-run live" shows "Live model unavailable, showing pre-computed results".

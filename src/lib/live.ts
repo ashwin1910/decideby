@@ -74,7 +74,7 @@ export async function runLiveExtraction(c: Contract, fetchImpl: typeof fetch = f
     if (!res.ok || !(res.headers.get('content-type') ?? '').includes('application/json')) return { ok: false, reason: `HTTP ${res.status}` };
     const body = (await res.json()) as { model?: string; terms?: LiveTerm[] };
     if (!Array.isArray(body.terms)) return { ok: false, reason: 'bad response' };
-    return { ok: true, model: body.model ?? 'claude', rows: diffTerms(c, body.terms), at: new Date() };
+    return { ok: true, model: body.model ?? 'Gemini', rows: diffTerms(c, body.terms), at: new Date() };
   } catch (e) {
     return { ok: false, reason: ctrl.signal.aborted ? 'timed out after 20 s' : 'network error' };
   } finally {
