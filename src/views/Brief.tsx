@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, type ReactNode } from 'react';
 import { Badge, Card, DaysLeft, ReassignOwner, StageBadge, TierBadge } from '../components';
 import { COMPANY } from '../data/seed';
 import type { Contract, TermKey } from '../data/types';
@@ -139,168 +139,42 @@ export default function Brief({ id }: { id: string }) {
   const canProtect =
     !rec && !windowClosed && tier === 'large' && !c.critical && c.renewOnNewTermsAfterNotice && (r.stage === 'takeover' || r.stage === 'overdue') && !!dr.noticeDeadline;
 
+  // Where the brief is in its four steps: Decide -> Approve -> Send/Dispatch -> Outcome.
+  const step = !rec ? 1 : rec.letter && rec.letter.status === 'drafted' ? 2 : rec.letter && rec.letter.status !== 'sent' ? 3 : rec.outcome ? 5 : 4;
+  const STEPS = ['Decide', 'Approve', c.notice.method === 'email' ? 'Send' : 'Dispatch', 'Outcome'];
+
   return (
     <div className="stack brief">
       <button className="link back" onClick={() => go('contract/' + c.id)}>
         ← Contract record
       </button>
-      <div className="rec-head">
-        <div>
-          <p className="eyebrow">Owner brief · one page</p>
-          <h1>{s.name}</h1>
-          <p className="muted">
-            For <b>{owner.owner.name}</b> ({owner.owner.title}), budget owner of {owner.costCentre}. Consulted: {owner.approver.name}.
-          </p>
+      <div className="brief-head">
+        <p className="eyebrow">Owner brief · one page</p>
+        <h1>{s.name}</h1>
+        <p className="muted">
+          For <b>{owner.owner.name}</b> ({owner.owner.title}), budget owner of {owner.costCentre}. Consulted: {owner.approver.name}.
+        </p>
+        <div className="row gap wrap">
+          <TierBadge tier={tier} />
+          <StageBadge stage={r.stage} />
+          {r.sch.triage && <Badge>Triage schedule</Badge>}
           <ReassignOwner contractId={c.id} currentName={owner.owner.name} />
-          <div className="row gap">
-            <TierBadge tier={tier} />
-            <StageBadge stage={r.stage} />
-            {r.sch.triage && <Badge tone="red">Triage</Badge>}
+        </div>
+      </div>
+
+      {/* ---------------- Decision first (sticky) ---------------- */}
+      <section className={`card decision-card ${rec ? 'done' : 'active'}`} aria-label="Decision">
+        <div className="decision-top">
+          <div className="decide-box">
+            <div className="muted sm">Decide by</div>
+            <DaysLeft date={dr.decideBy} now={now} />
+            {dr.noticeDeadline && (
+              <div className="muted sm">
+                Send window {fmt(dr.windowOpen)} – {fmt(dr.noticeDeadline)}
+              </div>
+            )}
           </div>
-        </div>
-        <div className="decide-box">
-          <div className="muted sm">Decide by</div>
-          <DaysLeft date={dr.decideBy} now={now} />
-          {dr.noticeDeadline && (
-            <div className="muted sm">
-              Send window {fmt(dr.windowOpen)} – {fmt(dr.noticeDeadline)}
-            </div>
-          )}
-        </div>
-      </div>
-
-      <div className="two">
-        <Card title="Terms in force (after amendments)">
-          <dl className="kv">
-            {KEY_TERMS.map((k) => {
-              const t = c.terms.find((x) => x.key === k)!;
-              const doc = c.docs.find((d) => d.id === t.docId);
-              return (
-                <div key={k}>
-                  <dt>{TERM_LABEL[k]}</dt>
-                  <dd>
-                    {t.value}
-                    {t.quote && (
-                      <div className="cite" title={t.quote}>
-                        “{t.quote.length > 140 ? t.quote.slice(0, 140) + '…' : t.quote}” — {doc?.title}
-                      </div>
-                    )}
-                  </dd>
-                </div>
-              );
-            })}
-          </dl>
-        </Card>
-
-        <div className="stack">
-          <Card title={pb.contracted ? 'Price: increase already contracted' : 'Price if renewed'}>
-            <div className="price">
-              <div>
-                <div className="muted sm">Last 12 months billed</div>
-                <div className="big">{money(pb.spend)}</div>
-                {pb.overbilled > 0 && <div className="muted sm">{money(pb.contractedSpend)} at contracted rates</div>}
-              </div>
-              <div className="arrow">→</div>
-              <div>
-                <div className="muted sm">
-                  {pb.contracted
-                    ? `Next 12 months: +${pb.pct}% contracted from ${fmt(pb.from)} (${pb.source})`
-                    : pb.pct
-                      ? `Next 12 months if it renews (up to +${pb.pct}%)`
-                      : 'Next 12 months if it renews (fees fixed)'}
-                </div>
-                <div className="big">{money(autoRenewPrice)}</div>
-              </div>
-            </div>
-            <p className="muted sm">
-              {pb.contracted && dr.termEnd && pb.from && pb.from < dr.termEnd
-                ? `The increase applies inside the current term (which ends ${fmt(dr.termEnd)}), so it is owed whatever is decided at renewal. `
-                : ''}
-              {pb.explain}
-            </p>
-          </Card>
-
-          {(rc.total > 0 || !!c.serviceCredit?.amount) && <CreditCard row={r} overcharge={rc.total} serviceCredit={c.serviceCredit?.amount ?? 0} />}
-
-          {c.rateCard && (
-            <Card title="Rate check against the contract" aside={rc.findings.length ? <Badge tone="red">{money(rc.total)} over</Badge> : rc.checked ? <Badge tone="green">Clean</Badge> : <Badge>Not checkable</Badge>}>
-              {rc.findings.length ? (
-                <>
-                  <p>
-                    {rc.findings.length} invoice lines billed above the rate in force. {rc.findings[0].note}.
-                  </p>
-                  <div className="table-wrap">
-                    <table className="tbl compact">
-                      <thead>
-                        <tr>
-                          <th>Invoice</th>
-                          <th>Role</th>
-                          <th className="num">Billed</th>
-                          <th className="num">Contract</th>
-                          <th className="num">Over</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {rc.findings.map((f) => (
-                          <tr key={f.invoiceId + f.item}>
-                            <td>{fmt(f.date)}</td>
-                            <td>{f.item}</td>
-                            <td className="num">${f.billed.toFixed(2)}</td>
-                            <td className="num">${f.contract.toFixed(2)}</td>
-                            <td className="num">{money(f.overcharge)}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                </>
-              ) : (
-                <p className="muted">{rc.checked ? `${rc.checked} invoices checked line by line; all at or below the rate card.` : 'Not checkable: invoices are billed as totals, with no unit prices to compare against the rate card.'}</p>
-              )}
-            </Card>
-          )}
-
-          <Card title="From the invoice approver">
-            {c.approverAnswers ? (
-              <dl className="kv three">
-                <div>
-                  <dt>Do we still use it?</dt>
-                  <dd className="cap">{c.approverAnswers.stillUsed}</dd>
-                </div>
-                <div>
-                  <dt>How is it performing?</dt>
-                  <dd className="cap">{c.approverAnswers.performance}</dd>
-                </div>
-                <div>
-                  <dt>Would we miss it?</dt>
-                  <dd className="cap">{c.approverAnswers.wouldMiss}</dd>
-                </div>
-                {c.approverAnswers.note && <p className="quote-note">“{c.approverAnswers.note}” — {owner.approver.name}</p>}
-              </dl>
-            ) : (
-              <p className="muted">
-                {owner.approver.name} has been asked the three questions; no answer yet.
-              </p>
-            )}
-            {c.serviceCredit && (
-              <div className="note">
-                <b>Service credit:</b> “{c.serviceCredit.clause}”
-                {c.serviceCredit.claimable && (
-                  <>
-                    {' '}
-                    <b className="tone-amber">Could be claimed:</b> {c.serviceCredit.claimable}
-                    {c.serviceCredit.amount ? ` — about ${money(c.serviceCredit.amount)}.` : '.'}
-                  </>
-                )}
-              </div>
-            )}
-          </Card>
-        </div>
-      </div>
-
-      {/* ---------------- Step 1: decide ---------------- */}
-      <Card title="1 · Decision" className={rec ? 'done' : 'active'}>
-        <div className="reco">
+          <div className="reco">
           <div>
             <div className="muted sm">Default recommendation</div>
             <div className="reco-a">{DECISION_LABEL[reco.action]}</div>
@@ -310,6 +184,7 @@ export default function Brief({ id }: { id: string }) {
               <li key={i}>{x}</li>
             ))}
           </ul>
+          </div>
         </div>
         {rec ? (
           <div className="note ok">
@@ -369,11 +244,151 @@ export default function Brief({ id }: { id: string }) {
             )}
           </>
         )}
-      </Card>
+      </section>
+
+      {/* ---------------- Supporting evidence ---------------- */}
+      <div className="evidence">
+        <Section title="Terms in force (after amendments)">
+          <dl className="kv">
+            {KEY_TERMS.map((k) => {
+              const t = c.terms.find((x) => x.key === k)!;
+              const doc = c.docs.find((d) => d.id === t.docId);
+              return (
+                <div key={k}>
+                  <dt>{TERM_LABEL[k]}</dt>
+                  <dd>
+                    {t.value}
+                    {t.quote && (
+                      <div className="cite" title={t.quote}>
+                        “{t.quote.length > 140 ? t.quote.slice(0, 140) + '…' : t.quote}” — {doc?.title}
+                      </div>
+                    )}
+                  </dd>
+                </div>
+              );
+            })}
+          </dl>
+        </Section>
+        <Section title={pb.contracted ? 'Price: increase already contracted' : 'Price if renewed'} aside={<span className="muted sm">{money(autoRenewPrice)} next 12 months</span>}>
+            <div className="price">
+              <div>
+                <div className="muted sm">Last 12 months billed</div>
+                <div className="big">{money(pb.spend)}</div>
+                {pb.overbilled > 0 && <div className="muted sm">{money(pb.contractedSpend)} at contracted rates</div>}
+              </div>
+              <div className="arrow">→</div>
+              <div>
+                <div className="muted sm">
+                  {pb.contracted
+                    ? `Next 12 months: +${pb.pct}% contracted from ${fmt(pb.from)} (${pb.source})`
+                    : pb.pct
+                      ? `Next 12 months if it renews (up to +${pb.pct}%)`
+                      : 'Next 12 months if it renews (fees fixed)'}
+                </div>
+                <div className="big">{money(autoRenewPrice)}</div>
+              </div>
+            </div>
+            <p className="muted sm">
+              {pb.contracted && dr.termEnd && pb.from && pb.from < dr.termEnd
+                ? `The increase applies inside the current term (which ends ${fmt(dr.termEnd)}), so it is owed whatever is decided at renewal. `
+                : ''}
+              {pb.explain}
+            </p>
+        </Section>
+        {c.rateCard && (
+          <Section
+            title="Rate check against the contract"
+            open={rc.findings.length > 0}
+            aside={rc.findings.length ? <Badge tone="red">{money(rc.total)} over</Badge> : rc.checked ? <Badge tone="green">Clean</Badge> : <Badge>Not checkable</Badge>}
+          >
+              {rc.findings.length ? (
+                <>
+                  <p>
+                    {rc.findings.length} invoice lines billed above the rate in force. {rc.findings[0].note}.
+                  </p>
+                  <div className="table-wrap">
+                    <table className="tbl compact">
+                      <thead>
+                        <tr>
+                          <th>Invoice</th>
+                          <th>Role</th>
+                          <th className="num">Billed</th>
+                          <th className="num">Contract</th>
+                          <th className="num">Over</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {rc.findings.map((f) => (
+                          <tr key={f.invoiceId + f.item}>
+                            <td>{fmt(f.date)}</td>
+                            <td>{f.item}</td>
+                            <td className="num">${f.billed.toFixed(2)}</td>
+                            <td className="num">${f.contract.toFixed(2)}</td>
+                            <td className="num">{money(f.overcharge)}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </>
+              ) : (
+                <p className="muted">{rc.checked ? `${rc.checked} invoices checked line by line; all at or below the rate card.` : 'Not checkable: invoices are billed as totals, with no unit prices to compare against the rate card.'}</p>
+              )}
+            {(rc.total > 0 || !!c.serviceCredit?.amount) && <CreditCard row={r} overcharge={rc.total} serviceCredit={c.serviceCredit?.amount ?? 0} />}
+          </Section>
+        )}
+        {!c.rateCard && !!c.serviceCredit?.amount && <CreditCard row={r} overcharge={0} serviceCredit={c.serviceCredit.amount} />}
+        <Section title="Approver input" aside={c.approverAnswers ? <span className="muted sm">answered by {owner.approver.name}</span> : <Badge>No answer yet</Badge>}>
+            {c.approverAnswers ? (
+              <dl className="kv three">
+                <div>
+                  <dt>Do we still use it?</dt>
+                  <dd className="cap">{c.approverAnswers.stillUsed}</dd>
+                </div>
+                <div>
+                  <dt>How is it performing?</dt>
+                  <dd className="cap">{c.approverAnswers.performance}</dd>
+                </div>
+                <div>
+                  <dt>Would we miss it?</dt>
+                  <dd className="cap">{c.approverAnswers.wouldMiss}</dd>
+                </div>
+                {c.approverAnswers.note && <p className="quote-note">“{c.approverAnswers.note}” — {owner.approver.name}</p>}
+              </dl>
+            ) : (
+              <p className="muted">
+                {owner.approver.name} has been asked the three questions; no answer yet.
+              </p>
+            )}
+            {c.serviceCredit && (
+              <div className="note">
+                <b>Service credit:</b> “{c.serviceCredit.clause}”
+                {c.serviceCredit.claimable && (
+                  <>
+                    {' '}
+                    <b className="tone-amber">Could be claimed:</b> {c.serviceCredit.claimable}
+                    {c.serviceCredit.amount ? ` — about ${money(c.serviceCredit.amount)}.` : '.'}
+                  </>
+                )}
+              </div>
+            )}
+        </Section>
+      </div>
+
+      {/* ---------------- Stepper ---------------- */}
+      <ol className="stepper" aria-label="Progress">
+        {STEPS.map((label, i) => (
+          <li key={label} className={step > i + 1 ? 'done' : step === i + 1 ? 'current' : ''} aria-current={step === i + 1 ? 'step' : undefined}>
+            <span className="step-n">{step > i + 1 ? '✓' : i + 1}</span>
+            {label}
+            {i === 1 && rec && !rec.letter && <span className="muted sm"> · not needed</span>}
+          </li>
+        ))}
+      </ol>
 
       {/* ---------------- Step 2: notice ---------------- */}
       {rec && (
-        <Card title="2 · Notice to the supplier" className={rec.letter?.status === 'sent' || !rec.letter ? 'done' : 'active'}>
+        <Card title="Approve and send the notice" className={rec.letter?.status === 'sent' || !rec.letter ? 'done' : 'active'}>
           {!rec.letter ? (
             <p className="muted">
               {rec.decision === 'renew'
@@ -442,7 +457,7 @@ function OutcomeStep({ row, autoRenewPrice }: { row: Row; autoRenewPrice: number
 
   if (rec.outcome)
     return (
-      <Card title="3 · Outcome recorded" className="done">
+      <Card title="Outcome recorded" className="done">
         <div className="stats">
           <div className="stat">
             <div className="stat-l">New annual price</div>
@@ -471,7 +486,7 @@ function OutcomeStep({ row, autoRenewPrice }: { row: Row; autoRenewPrice: number
     );
 
   return (
-    <Card title="3 · Record the outcome" className="active">
+    <Card title="Record the outcome" className="active">
       <div className="form-row">
         <label className="field">
           <span>New annual price ($)</span>
@@ -640,5 +655,18 @@ ${person('p-proc')!.title}, ${COMPANY}`;
         </button>
       )}
     </Card>
+  );
+}
+
+/** A collapsible evidence section. */
+function Section({ title, aside, open = false, children }: { title: string; aside?: ReactNode; open?: boolean; children: ReactNode }) {
+  return (
+    <details className="card section" open={open}>
+      <summary>
+        <h3>{title}</h3>
+        {aside}
+      </summary>
+      <div className="section-body">{children}</div>
+    </details>
   );
 }

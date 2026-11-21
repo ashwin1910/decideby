@@ -353,3 +353,31 @@ details.outside ul { margin: 6px 0 0; padding-left: 18px; }
   .kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .kpis .kpi:first-child { grid-column: 1 / -1; }
 }
+
+/* ---------- brief: decision first ---------- */
+.brief-head h1 { margin-bottom: 2px; }
+.decision-card { display: flex; flex-direction: column; gap: 12px; }
+.decision-top { display: grid; grid-template-columns: 220px minmax(0, 1fr); gap: 12px; align-items: stretch; }
+.decision-top .decide-box { min-width: 0; background: var(--surface-2); border: 0; }
+.decision-top .reco { margin: 0; }
+.decision-card .choices { margin-bottom: 0; }
+@media (min-width: 900px) and (min-height: 700px) {
+  .decision-card { position: sticky; top: 60px; z-index: 5; box-shadow: 0 6px 18px rgba(16, 24, 40, 0.08); }
+}
+.evidence { display: flex; flex-direction: column; gap: 10px; }
+details.section { padding: 0; }
+details.section > summary { list-style: none; cursor: pointer; display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 14px 18px; flex-wrap: wrap; }
+details.section > summary::-webkit-details-marker { display: none; }
+details.section > summary h3::before { content: '▸'; display: inline-block; width: 16px; color: var(--muted); transition: transform 0.15s; }
+details.section[open] > summary h3::before { transform: rotate(90deg); }
+.section-body { padding: 0 18px 16px; display: flex; flex-direction: column; gap: 10px; }
+.section-body .card { box-shadow: none; }
+.stepper { list-style: none; margin: 8px 0 0; padding: 0; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; }
+.stepper li { display: flex; align-items: center; gap: 8px; padding: 8px 10px; border-radius: 10px; background: var(--surface-2); color: var(--muted); font-weight: 600; font-size: 13px; }
+.stepper li.current { background: var(--accent-soft); color: var(--accent); outline: 2px solid var(--accent); }
+.stepper li.done { color: var(--green); }
+.step-n { width: 22px; height: 22px; border-radius: 50%; display: grid; place-items: center; background: var(--surface); font-size: 12px; flex: none; }
+@media (max-width: 860px) {
+  .decision-top { grid-template-columns: minmax(0, 1fr); }
+  .stepper { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
