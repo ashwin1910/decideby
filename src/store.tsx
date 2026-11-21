@@ -112,7 +112,9 @@ function persist(key: string, value: Record<string, unknown>) {
   }
 }
 
-const parseHash = () => (location.hash.replace(/^#\/?/, '') || 'triage').split('/');
+const parseHash = () => (location.hash.replace(/^#\/?/, '').split('?')[0] || 'triage').split('/');
+/** Query string carried in the hash, e.g. #/repository?q=... */
+export const hashQuery = () => new URLSearchParams(location.hash.split('?')[1] ?? '');
 
 // Static per-contract computation (dates are relative to go-live, not the slider).
 const BASE = CONTRACTS.map((c) => {

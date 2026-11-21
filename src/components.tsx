@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react';
+import { useState, type ReactNode } from 'react';
 import { PEOPLE } from './data/seed';
 import { useStore } from './store';
 import type { Tier } from './data/types';
@@ -99,5 +99,86 @@ export function ReassignOwner({ contractId, currentName }: { contractId: string;
         ))}
       </select>
     </label>
+  );
+}
+
+const TOUR_KEY = 'decideby.tour.v1';
+const TOUR: { title: string; text: string; path: string; day?: number }[] = [
+  { title: 'Triage', text: 'Week 1: the contracts that must be decided within 45 days, from the seed data.', path: 'triage', day: 0 },
+  { title: 'BrightStaff', text: 'The amendment moved the deadline; the rate check shows the 6% increase billed early — leverage to renegotiate.', path: 'brief/brightstaff' },
+  { title: 'Northwind exit, held', text: 'Choose Exit and approve: the letter is held until the window opens on 16 Dec.', path: 'brief/northwind' },
+  {
+    title: 'Ask a question',
+    text: "Not about renewals: which suppliers can we exit for convenience on 30 days' notice?",
+    path: `repository?q=${encodeURIComponent("which suppliers can we exit for convenience on 30 days' notice?")}`,
+  },
+  { title: 'Move the slider', text: 'Day 6: undecided contracts escalate on the triage schedule; two have auto-renewed.', path: 'triage', day: 6 },
+  { title: 'Outcome and evaluation', text: "Record BrightStaff's outcome, then end on the evaluation page and the north star.", path: 'evaluation' },
+];
+
+/** Dismissible first-visit guide that follows the 3-minute demo script. */
+export function TourChip() {
+  const { go, setOffset } = useStore();
+  const [state, setState] = useState<'chip' | number | 'gone'>(() => {
+    try {
+      return localStorage.getItem(TOUR_KEY) === 'dismissed' ? 'gone' : 'chip';
+    } catch {
+      return 'chip';
+    }
+  });
+  const dismiss = () => {
+    try {
+      localStorage.setItem(TOUR_KEY, 'dismissed');
+    } catch {
+      /* ignore */
+    }
+    setState('gone');
+  };
+  const open = (i: number) => {
+    const st = TOUR[i];
+    if (st.day != null) setOffset(st.day);
+    go(st.path);
+    setState(i);
+  };
+  if (state === 'gone') return null;
+  if (state === 'chip')
+    return (
+      <div className="tour chip-mode" role="region" aria-label="3-minute tour">
+        <button type="button" className="tour-start" onClick={() => open(0)}>
+          ▶ 3-minute tour
+        </button>
+        <button type="button" className="tour-x" aria-label="Dismiss tour" onClick={dismiss}>
+          ×
+        </button>
+      </div>
+    );
+  const st = TOUR[state];
+  return (
+    <div className="tour" role="region" aria-label="3-minute tour">
+      <ol className="tour-steps">
+        {TOUR.map((t, i) => (
+          <li key={t.title}>
+            <button type="button" className={i === state ? 'on' : ''} aria-current={i === state ? 'step' : undefined} onClick={() => open(i)}>
+              {i + 1}. {t.title}
+            </button>
+          </li>
+        ))}
+      </ol>
+      <p className="tour-text">{st.text}</p>
+      <div className="row gap">
+        {state < TOUR.length - 1 ? (
+          <button type="button" className="primary sm" onClick={() => open(state + 1)}>
+            Next: {TOUR[state + 1].title} →
+          </button>
+        ) : (
+          <button type="button" className="primary sm" onClick={dismiss}>
+            Finish tour
+          </button>
+        )}
+        <button type="button" className="ghost sm" aria-label="Dismiss tour" onClick={dismiss}>
+          Close
+        </button>
+      </div>
+    </div>
   );
 }

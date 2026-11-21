@@ -5,7 +5,7 @@ import type { TermKey } from '../data/types';
 import { fmt } from '../lib/dates';
 import { moneyK, person, supplierOf, TERM_LABEL, tierOf } from '../lib/logic';
 import { parseQuery, runQuery } from '../lib/search';
-import { useStore } from '../store';
+import { hashQuery, useStore } from '../store';
 import { inScope } from './Triage';
 import LegalQueue from './LegalQueue';
 
@@ -19,8 +19,9 @@ const EXAMPLES = [
 
 export default function Repository() {
   const { rows, now, go } = useStore();
-  const [q, setQ] = useState(EXAMPLES[0]);
-  const [asked, setAsked] = useState(EXAMPLES[0]);
+  const initial = hashQuery().get('q') ?? EXAMPLES[0];
+  const [q, setQ] = useState(initial);
+  const [asked, setAsked] = useState(initial);
   const [connected, setConnected] = useState(true);
   const [syncing, setSyncing] = useState(false);
 

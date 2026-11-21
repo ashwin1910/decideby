@@ -1,6 +1,7 @@
 import { GO_LIVE } from './data/seed';
 import { addBusinessDays, diffDays, fmtWd } from './lib/dates';
 import { useState } from 'react';
+import { TourChip } from './components';
 import { useStore, type Role } from './store';
 import Brief from './views/Brief';
 import Case from './views/Case';
@@ -104,7 +105,10 @@ export default function App() {
           </div>
         </div>
       </header>
-      <main>{view}</main>
+      <main>
+        <TourChip />
+        {view}
+      </main>
       <footer className="foot">
         Prototype with seeded, synthetic data. Connections to Drive, the mailbox and the ERP are simulated; AI extraction results are pre-computed; “Re-run live” asks the model again. Dates
         are calculated in code.
