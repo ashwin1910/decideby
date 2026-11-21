@@ -240,8 +240,11 @@ function build(spec: Spec): { contract: Contract; supplier: Supplier } {
     return { key: k, value, quote, docId: docRef, confidence };
   });
 
+  const nm = /^by (courier|certified mail|email) to (.+)$/.exec(spec.noticeAddress);
+  if (!nm) throw new Error(`Unrecognised notice method for ${spec.id}`);
   const contract: Contract = {
     id: spec.id,
+    notice: { method: nm[1] === 'certified mail' ? 'certified' : (nm[1] as 'courier' | 'email'), address: nm[2] },
     supplierId: sid,
     title,
     dates: d,

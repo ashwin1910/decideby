@@ -264,3 +264,15 @@ nav button.on { background: var(--surface); color: var(--text); box-shadow: var(
 .row.gap { flex-wrap: wrap; }
 .badge { white-space: normal; }
 @media (max-width: 860px) { .two { grid-template-columns: minmax(0, 1fr); } }
+
+/* dispatch pack (courier / certified mail notices) */
+.dispatch-pack { border: 1px dashed var(--border); border-radius: 10px; padding: 10px; background: var(--surface); }
+.address-label { border: 1px solid var(--text); border-radius: 6px; padding: 8px 10px; margin: 6px 0; display: inline-block; font-size: 13px; }
+.field.inline { flex-direction: row; align-items: center; gap: 6px; margin: 0; }
+.field.inline input { width: 220px; }
+@media print {
+  body * { visibility: hidden; }
+  .dispatch-pack, .dispatch-pack * { visibility: visible; }
+  .dispatch-pack { position: absolute; inset: 0; border: 0; }
+  .dispatch-pack .letter { max-height: none; border: 0; }
+}

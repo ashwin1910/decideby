@@ -81,8 +81,12 @@ export interface ApproverAnswers {
   note?: string;
 }
 
+export type NoticeMethod = 'courier' | 'certified' | 'email';
+
 export interface Contract {
   id: string;
+  /** How notices must be delivered, from the notice clause. */
+  notice: { method: NoticeMethod; address: string };
   supplierId: string;
   title: string;
   dates: DateTerms;

@@ -19,7 +19,16 @@ export interface DecisionRecord {
   overrideReason?: string;
   decidedOn: ISODate;
   decidedBy: string;
-  letter?: { status: 'drafted' | 'approved' | 'sent'; approvedBy?: string; approvedOn?: ISODate; sentOn?: ISODate };
+  letter?: {
+    status: 'drafted' | 'approved' | 'packed' | 'sent';
+    approvedBy?: string;
+    approvedOn?: ISODate;
+    /** courier / certified mail: when the dispatch pack was generated */
+    packedOn?: ISODate;
+    /** date sent by email, or date marked dispatched */
+    sentOn?: ISODate;
+    tracking?: string;
+  };
   protective?: boolean;
   outcome?: Outcome;
 }

@@ -39,10 +39,19 @@ function approverFor(c: Contract) {
   return { who: `${person('p-legal')!.name} (Legal)`, id: 'p-legal' };
 }
 
-function letterText(c: Contract, dr: DateResult, d: Decision, sendOn: ISODate) {
+export const METHOD_LABEL = { courier: 'courier', certified: 'certified mail', email: 'email' } as const;
+
+export function letterFooter(c: Contract, tracking?: string) {
+  const { method, address } = c.notice;
+  if (method === 'email') return `Sent by email from the procurement mailbox to ${address}.`;
+  const how = method === 'courier' ? 'Delivered by courier' : 'Sent by certified mail, return receipt requested,';
+  return `${how} to ${address}.${tracking ? ` Tracking no. ${tracking}.` : ''}`;
+}
+
+export function letterText(c: Contract, dr: DateResult, d: Decision, sendOn: ISODate, tracking?: string) {
   const s = supplierOf(c);
   const noticeQuote = c.terms.find((t) => t.key === 'notice')!.quote;
-  const addr = c.terms.find((t) => t.key === 'noticeAddress')!.value;
+  const addr = `${METHOD_LABEL[c.notice.method]} — ${c.notice.address}`;
   const evergreenEnd = c.dates.type === 'evergreen' ? addDays(sendOn, c.dates.noticeDays!) : null;
   const intent =
     c.dates.type === 'evergreen'
@@ -65,7 +74,7 @@ In accordance with the Agreement — "${noticeQuote}" — ${COMPANY} hereby ${in
 
 ${person('p-proc')!.name}
 ${person('p-proc')!.title}, ${COMPANY}
-Sent from the procurement mailbox.`;
+${letterFooter(c, tracking)}`;
 }
 
 export default function Brief({ id }: { id: string }) {
@@ -323,7 +332,7 @@ export default function Brief({ id }: { id: string }) {
             </p>
           ) : (
             <>
-              <pre className="letter">{letterText(c, dr, rec.decision, rec.letter.sentOn ?? (inWindow ? now : dr.windowOpen ?? now))}</pre>
+              <pre className="letter">{letterText(c, dr, rec.decision, rec.letter.sentOn ?? (inWindow ? now : dr.windowOpen ?? now), rec.letter.tracking)}</pre>
               <div className="letter-steps">
                 <div className={`ls ${rec.letter.status !== 'drafted' ? 'ok' : ''}`}>
                   <b>Approve</b>
@@ -340,24 +349,7 @@ export default function Brief({ id }: { id: string }) {
                     </span>
                   )}
                 </div>
-                <div className={`ls ${rec.letter.status === 'sent' ? 'ok' : ''}`}>
-                  <b>Send inside the window</b>
-                  {rec.letter.status === 'sent' ? (
-                    <span className="muted sm">Sent {fmt(rec.letter.sentOn)} to the contract's notice address</span>
-                  ) : rec.letter.status === 'approved' && windowNotOpen ? (
-                    <span className="held">
-                      ⏸ Held until the window opens on <b>{fmt(dr.windowOpen)}</b> ({diffDays(dr.windowOpen!, now)} days). Move the slider to release it.
-                    </span>
-                  ) : rec.letter.status === 'approved' && windowClosed ? (
-                    <span className="tone-red sm">Window closed on {fmt(dr.noticeDeadline)} — sending now would be invalid.</span>
-                  ) : rec.letter.status === 'approved' ? (
-                    <button className="primary sm" onClick={() => update({ letter: { ...rec.letter!, status: 'sent', sentOn: now } })}>
-                      {tier === 'small' ? 'DecideBy sends now' : 'Send from procurement mailbox'}
-                    </button>
-                  ) : (
-                    <span className="muted sm">Waiting for approval</span>
-                  )}
-                </div>
+                <SendStep row={r} now={now} windowNotOpen={windowNotOpen} windowClosed={windowClosed} onUpdate={update} />
               </div>
             </>
           )}
@@ -435,5 +427,95 @@ function OutcomeStep({ row, autoRenewPrice }: { row: Row; autoRenewPrice: number
         Record outcome
       </button>
     </Card>
+  );
+}
+
+function SendStep({
+  row,
+  now,
+  windowNotOpen,
+  windowClosed,
+  onUpdate,
+}: {
+  row: Row;
+  now: ISODate;
+  windowNotOpen: boolean;
+  windowClosed: boolean;
+  onUpdate: (patch: Partial<DecisionRecord>) => void;
+}) {
+  const { records } = useStore();
+  const { c, dr } = row;
+  const rec = records[c.id]!;
+  const letter = rec.letter!;
+  const [tracking, setTracking] = useState('');
+  const tier = tierOf(c);
+  const email = c.notice.method === 'email';
+  const title = email ? 'Send by email, inside the window' : `Dispatch by ${METHOD_LABEL[c.notice.method]}, inside the window`;
+
+  let body;
+  if (letter.status === 'sent') {
+    body = (
+      <span className="muted sm">
+        {email ? `Emailed ${fmt(letter.sentOn)} to ${c.notice.address}` : `Dispatched by ${METHOD_LABEL[c.notice.method]} ${fmt(letter.sentOn)} · tracking ${letter.tracking}`}
+      </span>
+    );
+  } else if (letter.status === 'drafted') {
+    body = <span className="muted sm">Waiting for approval</span>;
+  } else if (windowNotOpen) {
+    body = (
+      <span className="held">
+        ⏸ Held until the window opens on <b>{fmt(dr.windowOpen)}</b> ({diffDays(dr.windowOpen!, now)} days). Move the slider to release it.
+      </span>
+    );
+  } else if (windowClosed) {
+    body = <span className="tone-red sm">Window closed on {fmt(dr.noticeDeadline)} — sending now would be invalid.</span>;
+  } else if (email) {
+    body = (
+      <button className="primary sm" onClick={() => onUpdate({ letter: { ...letter, status: 'sent', sentOn: now } })}>
+        {tier === 'small' ? `DecideBy emails ${c.notice.address} now` : `Send by email to ${c.notice.address}`}
+      </button>
+    );
+  } else if (letter.status === 'approved') {
+    body = (
+      <button className="primary sm" onClick={() => onUpdate({ letter: { ...letter, status: 'packed', packedOn: now } })}>
+        Generate dispatch pack
+      </button>
+    );
+  } else {
+    body = (
+      <div className="col gap">
+        <div className="dispatch-pack">
+          <div className="muted sm">Dispatch pack · {METHOD_LABEL[c.notice.method]}</div>
+          <div className="address-label">
+            <b>{supplierOf(c).name}</b>
+            <br />
+            {c.notice.address}
+          </div>
+          <pre className="letter">{letterText(c, dr, rec.decision, now)}</pre>
+        </div>
+        <div className="row gap wrap">
+          <button className="ghost sm" onClick={() => window.print()}>
+            Print pack
+          </button>
+          <label className="field inline">
+            <span>Tracking number</span>
+            <input value={tracking} onChange={(e) => setTracking(e.target.value)} placeholder="e.g. 1Z 999 AA1 0123 4567 84" />
+          </label>
+          <button
+            className="primary sm"
+            disabled={tracking.trim().length < 4}
+            onClick={() => onUpdate({ letter: { ...letter, status: 'sent', sentOn: now, tracking: tracking.trim() } })}
+          >
+            Mark dispatched
+          </button>
+        </div>
+      </div>
+    );
+  }
+  return (
+    <div className={`ls ${letter.status === 'sent' ? 'ok' : ''}`}>
+      <b>{title}</b>
+      {body}
+    </div>
   );
 }
