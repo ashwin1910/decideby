@@ -176,7 +176,7 @@ export default function Brief({ id }: { id: string }) {
       </div>
 
       {/* ---------------- Decision first (sticky) ---------------- */}
-      <section className={`card decision-card ${rec ? 'done' : 'active'}`} aria-label="Decision">
+      <section className={`card decision-card ${rec ? 'done' : 'active sticky'}`} aria-label="Decision">
         <div className="decision-top">
           <div className="decide-box">
             <div className="muted sm">Decide by</div>

@@ -362,7 +362,7 @@ details.outside ul { margin: 6px 0 0; padding-left: 18px; }
 .decision-top .reco { margin: 0; }
 .decision-card .choices { margin-bottom: 0; }
 @media (min-width: 900px) and (min-height: 700px) {
-  .decision-card { position: sticky; top: 60px; z-index: 5; box-shadow: 0 6px 18px rgba(16, 24, 40, 0.08); }
+  .decision-card.sticky { position: sticky; top: 60px; z-index: 5; box-shadow: 0 6px 18px rgba(16, 24, 40, 0.08); }
 }
 .evidence { display: flex; flex-direction: column; gap: 10px; }
 details.section { padding: 0; }
