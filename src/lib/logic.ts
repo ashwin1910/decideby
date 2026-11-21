@@ -345,7 +345,16 @@ export function rateCheck(c: Contract): { checked: number; findings: RateFinding
   return { checked: inv.length, findings, total: Math.round(findings.reduce((a, f) => a + f.overcharge, 0)) };
 }
 
-export type Decision = 'renew' | 'renegotiate' | 'reduce' | 'exit';
+export type Decision = 'renew' | 'renegotiate' | 'reduce' | 'exit' | 'midterm' | 'nextcycle';
+
+export const DECISION_LABEL: Record<Decision, string> = {
+  renew: 'Renew',
+  renegotiate: 'Renegotiate',
+  reduce: 'Reduce',
+  exit: 'Exit',
+  midterm: 'Renewed: negotiate mid-term',
+  nextcycle: 'Set next-cycle reminder',
+};
 
 export function recommend(c: Contract): { action: Decision; reasons: string[] } {
   const a = c.approverAnswers;

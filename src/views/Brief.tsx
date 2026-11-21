@@ -9,6 +9,7 @@ import {
   person,
   rateCheck,
   recommend,
+  DECISION_LABEL,
   supplierOf,
   TERM_LABEL,
   tierOf,
@@ -24,10 +25,16 @@ const ACTIONS: { k: Decision; label: string; desc: string }[] = [
   { k: 'exit', label: 'Exit', desc: 'Do not renew' },
 ];
 
+/** Once the send window has closed, a notice is invalid: the contract has renewed. */
+const LATE_ACTIONS: { k: Decision; label: string; desc: string }[] = [
+  { k: 'midterm', label: DECISION_LABEL.midterm, desc: 'It has renewed; ask for better terms within the new term' },
+  { k: 'nextcycle', label: DECISION_LABEL.nextcycle, desc: 'Decide well before the next notice deadline' },
+];
+
 const KEY_TERMS: TermKey[] = ['end', 'renewal', 'notice', 'tfc', 'priceIncrease', 'minCommit', 'noticeAddress'];
 
 function needsNotice(c: Contract, d: Decision) {
-  if (d === 'renew') return false;
+  if (d === 'renew' || d === 'midterm' || d === 'nextcycle') return false;
   if (c.dates.type === 'fixed') return false;
   return true;
 }
@@ -88,10 +95,18 @@ export default function Brief({ id }: { id: string }) {
   const s = supplierOf(c);
   const tier = tierOf(c);
   const rc = rateCheck(c);
-  const reco = recommend(c);
+  const windowClosed = !!dr.noticeDeadline && now > dr.noticeDeadline;
+  const baseReco = recommend(c);
+  // After the window closes, exit / renegotiate / reduce are no longer possible.
+  const reco = windowClosed
+    ? baseReco.action === 'renew'
+      ? { action: 'nextcycle' as Decision, reasons: [...baseReco.reasons, 'The contract has renewed; set a reminder so the next cycle is decided on time.'] }
+      : { action: 'midterm' as Decision, reasons: [`The window to ${baseReco.action} closed on ${fmt(dr.noticeDeadline)}; the contract has renewed.`, ...baseReco.reasons] }
+    : baseReco;
+  const actions = windowClosed ? LATE_ACTIONS : ACTIONS;
   const spend = last12Spend(c);
   const autoRenewPrice = Math.round(spend * (1 + c.priceIncreasePct / 100));
-  const picked = choice ?? reco.action;
+  const picked = choice && actions.some((a) => a.k === choice) ? choice : reco.action;
   const overriding = picked !== reco.action;
 
   const decide = (protective = false) => {
@@ -112,10 +127,9 @@ export default function Brief({ id }: { id: string }) {
 
   const update = (patch: Partial<DecisionRecord>) => setRecord(c.id, { ...rec!, ...patch });
 
-  const inWindow = !dr.noticeDeadline || (now >= dr.windowOpen! && now <= dr.noticeDeadline);
   const windowNotOpen = !!dr.noticeDeadline && now < dr.windowOpen!;
-  const windowClosed = !!dr.noticeDeadline && now > dr.noticeDeadline;
-  const canProtect = !rec && tier === 'large' && !c.critical && c.renewOnNewTermsAfterNotice && (r.stage === 'takeover' || r.stage === 'overdue') && !!dr.noticeDeadline;
+  const canProtect =
+    !rec && !windowClosed && tier === 'large' && !c.critical && c.renewOnNewTermsAfterNotice && (r.stage === 'takeover' || r.stage === 'overdue') && !!dr.noticeDeadline;
 
   return (
     <div className="stack brief">
@@ -266,7 +280,7 @@ export default function Brief({ id }: { id: string }) {
         <div className="reco">
           <div>
             <div className="muted sm">Default recommendation</div>
-            <div className="reco-a cap">{reco.action}</div>
+            <div className="reco-a">{DECISION_LABEL[reco.action]}</div>
           </div>
           <ul>
             {reco.reasons.map((x, i) => (
@@ -276,7 +290,7 @@ export default function Brief({ id }: { id: string }) {
         </div>
         {rec ? (
           <div className="note ok">
-            <b className="cap">{rec.decision}</b> — decided by {rec.decidedBy} on {fmt(rec.decidedOn)}
+            <b>{DECISION_LABEL[rec.decision]}</b> — decided by {rec.decidedBy} on {fmt(rec.decidedOn)}
             {rec.decidedOn <= dr.decideBy ? ' (before the decide-by date)' : ' (after the decide-by date)'}.
             {rec.overrideReason && <> Override reason: “{rec.overrideReason}”.</>}
             <button className="link sm" onClick={() => setRecord(c.id, undefined)}>
@@ -285,8 +299,14 @@ export default function Brief({ id }: { id: string }) {
           </div>
         ) : (
           <>
-            <div className="choices">
-              {ACTIONS.map((a) => (
+            {windowClosed && (
+              <div className="note bad" role="alert">
+                <b>The send window closed on {fmt(dr.noticeDeadline)}.</b> A notice now would be invalid, so the contract has renewed on its terms. Renegotiate and
+                Exit are no longer available; negotiate within the new term or set a reminder for the next cycle.
+              </div>
+            )}
+            <div className={`choices ${windowClosed ? 'two-up' : ''}`}>
+              {actions.map((a) => (
                 <button key={a.k} className={`choice ${picked === a.k ? 'on' : ''}`} onClick={() => setChoice(a.k)}>
                   <b>{a.label}</b>
                   <span>{a.desc}</span>
@@ -302,7 +322,7 @@ export default function Brief({ id }: { id: string }) {
             )}
             <div className="row gap">
               <button className="primary" disabled={overriding && reason.trim().length < 5} onClick={() => decide()}>
-                {tier === 'small' ? `Confirm “${picked}” (one tap)` : `Record decision: ${picked}`}
+                {tier === 'small' ? `Confirm “${DECISION_LABEL[picked]}” (one tap)` : `Record decision: ${DECISION_LABEL[picked]}`}
               </button>
               <span className="muted sm">as {owner.owner.name}</span>
             </div>
@@ -328,11 +348,15 @@ export default function Brief({ id }: { id: string }) {
             <p className="muted">
               {rec.decision === 'renew'
                 ? 'Renewing: no notice is sent. The contract renews on its terms.'
-                : 'Fixed term: no notice is needed; it ends on its own. Procurement starts the new agreement or the exit plan.'}
+                : rec.decision === 'midterm'
+                  ? 'No notice: the contract has renewed. Procurement opens a mid-term negotiation with the supplier.'
+                  : rec.decision === 'nextcycle'
+                    ? `No notice: the contract has renewed. A reminder is set for the next cycle's brief.`
+                    : 'Fixed term: no notice is needed; it ends on its own. Procurement starts the new agreement or the exit plan.'}
             </p>
           ) : (
             <>
-              <pre className="letter">{letterText(c, dr, rec.decision, rec.letter.sentOn ?? (inWindow ? now : dr.windowOpen ?? now), rec.letter.tracking)}</pre>
+              <pre className="letter">{letterText(c, dr, rec.decision, rec.letter.sentOn ?? now, rec.letter.tracking)}</pre>
               <div className="letter-steps">
                 <div className={`ls ${rec.letter.status !== 'drafted' ? 'ok' : ''}`}>
                   <b>Approve</b>
