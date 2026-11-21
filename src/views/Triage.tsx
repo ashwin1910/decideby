@@ -222,7 +222,6 @@ export default function Triage() {
                       <div className="meta">
                         {TIER_LABEL[tierOf(r.c)]} · {TYPE_LABEL[r.c.dates.type]}
                         {r.sch.triage && ' · triage schedule'}
-                        {r.c.family && ' · answer-keyed'}
                       </div>
                     </td>
                     <td className="num">{moneyK(s.annualSpend)}</td>

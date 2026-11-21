@@ -48,7 +48,7 @@ export default function Case() {
             <b>Intake and negotiation help one future contract at a time.</b> The money sits in the thousands of contracts already signed.
           </li>
           <li>
-            <b>"AI-understood" has a precise meaning:</b> the repository knows about 12 terms in every contract and what each requires next, and by when.
+            <b>"AI-understood" has a precise meaning:</b> the repository knows 14 terms in every contract and what each requires next, and by when.
           </li>
           <li>
             <b>The real cost is the backlog, not the daily load.</b> Reading 2,500 contracts at 30–45 minutes each is 1,250–1,875 hours — roughly 0.7–1 person-year
@@ -165,7 +165,7 @@ export default function Case() {
         <T
           head={['Item', 'Status', 'Why']}
           rows={[
-            ['Repository: ~12 terms per contract, cited search', 'In', '"Searchable and AI-understood" means more than renewal dates'],
+            ['Repository: 14 terms per contract, cited search', 'In', '"Searchable and AI-understood" means more than renewal dates'],
             ['Renewal decision loop, triage to outcome', 'In, end to end', 'Renewal is when the company has leverage'],
             ['Invoice rate check', 'Narrowed to contracts with a rate card', 'Others have no unit price to check'],
             ['Supplier performance', "Narrowed to the approver's answers and service-credit clauses", 'No SLA data in an email-and-Excel company'],
