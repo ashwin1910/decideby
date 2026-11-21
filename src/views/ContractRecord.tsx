@@ -4,27 +4,28 @@ import { fmt, fmtWd, diffDays } from '../lib/dates';
 import { money, quoteFound, supplierOf, TERM_LABEL, termStatus, tierOf, TYPE_LABEL, computeDates } from '../lib/logic';
 import { GO_LIVE } from '../data/seed';
 import { useStore } from '../store';
+import { runLiveExtraction, type LiveResult } from '../lib/live';
 
 export default function ContractRecord({ id }: { id: string }) {
   const { rows, now, go } = useStore();
   const r = rows.find((x) => x.c.id === id);
   const [openDoc, setOpenDoc] = useState<string | null>(null);
-  const [rerun, setRerun] = useState<'idle' | 'running' | string>('idle');
+  const [rerun, setRerun] = useState<'idle' | 'running' | { local: string; live: LiveResult }>('idle');
   if (!r) return <p>Contract not found.</p>;
   const { c, dr, sch, owner } = r;
   const s = supplierOf(c);
   const tier = tierOf(c);
 
-  const runLive = () => {
+  const runLive = async () => {
     setRerun('running');
-    setTimeout(() => {
-      const verified = c.terms.filter((t) => quoteFound(c, t.key)).length;
-      const again = computeDates(c, GO_LIVE);
-      const same = again.decideBy === dr.decideBy && again.noticeDeadline === dr.noticeDeadline;
-      setRerun(
-        `Re-ran at ${new Date().toLocaleTimeString()}: ${verified} of ${c.terms.length} quotes found verbatim in the source documents; dates recalculated — ${same ? 'unchanged' : 'CHANGED'}.`,
-      );
-    }, 1400);
+    const live = await runLiveExtraction(c);
+    const verified = c.terms.filter((t) => quoteFound(c, t.key)).length;
+    const again = computeDates(c, GO_LIVE);
+    const same = again.decideBy === dr.decideBy && again.noticeDeadline === dr.noticeDeadline;
+    setRerun({
+      local: `${verified} of ${c.terms.length} stored quotes found verbatim in the source documents; dates recalculated in code — ${same ? 'unchanged' : 'CHANGED'}.`,
+      live,
+    });
   };
 
   const windowState = !dr.noticeDeadline
@@ -63,11 +64,11 @@ export default function ContractRecord({ id }: { id: string }) {
             Open owner brief →
           </button>
           <button className="ghost" onClick={runLive} disabled={rerun === 'running'}>
-            {rerun === 'running' ? 'Re-running…' : '↻ Re-run live'}
+            {rerun === 'running' ? 'Reading with the model…' : '↻ Re-run live'}
           </button>
         </div>
       </div>
-      {rerun !== 'idle' && rerun !== 'running' && <div className="note ok">{rerun}</div>}
+      {typeof rerun === 'object' && <LivePanel result={rerun.live} local={rerun.local} />}
 
       {dr.missedPrior && (
         <div className="note bad">
@@ -219,5 +220,63 @@ export default function ContractRecord({ id }: { id: string }) {
         <p className="muted sm">Simulated date: {fmt(now)}. {r.rec ? 'Decided — escalation stopped.' : 'Undecided — escalation continues as the slider moves.'}</p>
       </Card>
     </div>
+  );
+}
+
+function LivePanel({ result, local }: { result: LiveResult; local: string }) {
+  if (!result.ok)
+    return (
+      <div className="note warn" role="status">
+        <b>Live model unavailable, showing pre-computed results.</b> <span className="muted sm">({result.reason})</span>
+        <div className="sm">{local}</div>
+      </div>
+    );
+  const n = (st: string) => result.rows.filter((r) => r.status === st).length;
+  return (
+    <Card
+      title={`Live re-read by ${result.model} at ${result.at.toLocaleTimeString()}`}
+      aside={
+        <div className="row gap">
+          <Badge tone="green">{n('matched')} matched</Badge>
+          <Badge tone="amber">{n('changed')} changed</Badge>
+          <Badge tone="blue">{n('new')} new</Badge>
+          {n('missing') > 0 && <Badge tone="red">{n('missing')} missing</Badge>}
+        </div>
+      }
+    >
+      <p className="muted sm">{local} The model's quotes are put through the same verbatim check.</p>
+      <div className="table-wrap">
+        <table className="tbl compact">
+          <thead>
+            <tr>
+              <th>Term</th>
+              <th>Result</th>
+              <th>Stored value</th>
+              <th>Model's value and quote</th>
+              <th>Quote check</th>
+            </tr>
+          </thead>
+          <tbody>
+            {result.rows.map((r) => (
+              <tr key={r.key}>
+                <td>
+                  <b>{r.label}</b>
+                </td>
+                <td>
+                  <Badge tone={r.status === 'matched' ? 'green' : r.status === 'changed' ? 'amber' : r.status === 'new' ? 'blue' : 'red'}>{r.status}</Badge>
+                </td>
+                <td>{r.stored}</td>
+                <td>
+                  {r.live}
+                  {r.liveQuote && <div className="cite">“{r.liveQuote}”</div>}
+                  {r.confidence != null && <div className="muted sm">confidence {Math.round(r.confidence * 100)}%</div>}
+                </td>
+                <td>{r.liveQuote ? r.quoteVerified ? <Badge tone="green">Verbatim</Badge> : <Badge tone="red">Not in document</Badge> : <Badge>Not found</Badge>}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </Card>
   );
 }

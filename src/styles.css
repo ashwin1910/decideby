@@ -190,6 +190,7 @@ nav button.on { background: var(--surface); color: var(--text); box-shadow: var(
 .note { background: var(--surface-2); border-radius: 10px; padding: 10px 12px; margin: 8px 0 0; font-size: 13px; }
 .note.ok { background: var(--green-soft); }
 .note.bad { background: var(--red-soft); }
+.note.warn { background: var(--amber-soft); }
 .note .link { margin-left: 8px; }
 .docs { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 10px; }
 .doc, .letter { white-space: pre-wrap; background: var(--surface-2); border-radius: 8px; padding: 12px; font: 12.5px/1.55 ui-monospace, SFMono-Regular, Menlo, monospace; margin: 6px 0 0; max-height: 360px; overflow: auto; }
