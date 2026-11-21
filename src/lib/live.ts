@@ -30,7 +30,13 @@ export type LiveResult =
   | { ok: true; model: string; rows: DiffRow[]; at: Date }
   | { ok: false; reason: string };
 
-const norm = (s: string) => s.replace(/\s+/g, ' ').trim().toLowerCase();
+/** Compare sentences, ignoring whitespace, case and a leading clause number such as "4. ". */
+const norm = (s: string) =>
+  s
+    .replace(/\s+/g, ' ')
+    .trim()
+    .replace(/^\(?\d+(\.\d+)*[.)]\s+/, '')
+    .toLowerCase();
 
 /** The same verbatim check the repository applies to stored quotes. */
 export function quoteInDocs(c: Contract, quote: string, docId?: string): boolean {

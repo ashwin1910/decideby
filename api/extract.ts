@@ -14,7 +14,7 @@ const API = 'https://generativelanguage.googleapis.com/v1beta';
 /** Total time for one extraction (Vercel allows 30 s; the browser waits 28 s). */
 const TIMEOUT_MS = 25_000;
 /** The first model gets this long before we fall back to a faster one. */
-const FIRST_ATTEMPT_MS = 12_000;
+const FIRST_ATTEMPT_MS = 10_000;
 const MAX_CHARS = 60_000;
 
 export const TERM_KEYS = [
@@ -64,7 +64,7 @@ const RESPONSE_SCHEMA = {
 export const SYSTEM =
   'You extract terms from a supplier contract family (a signed agreement plus any amendments). ' +
   'Later-signed amendments override the original agreement. For every term, copy the supporting sentence ' +
-  'exactly as written - character for character - into "quote", and give the id of the document it came from. ' +
+  'exactly as written - character for character, without the clause number - into "quote", and give the id of the document it came from. ' +
   'If a term is not in any document, set quote and docId to "" and confidence low. Never invent text.';
 
 interface InDoc {
@@ -113,14 +113,15 @@ export function rankModels(models: ModelInfo[]): string[] {
 export const pickModel = (models: ModelInfo[]): string | null => rankModels(models)[0] ?? null;
 
 /**
- * Models to try, in order, when one is busy: the best full Flash, the best
- * Flash-Lite (fast, rarely overloaded), then the next full Flash models.
+ * Models to try, in order: the newest stable Flash-Lite first (it answered in
+ * about 3 s with every quote verbatim, while full Flash models took over 12 s or
+ * were overloaded), then the best full Flash, then the next of each.
  */
 export function fallbackChain(models: ModelInfo[], preferred?: string): string[] {
   const ranked = rankModels(models);
   const full = ranked.filter((n) => !/lite/.test(n) && !/preview/.test(n));
   const lite = ranked.filter((n) => /lite/.test(n) && !/preview/.test(n));
-  const chain = [preferred, full[0], lite[0], full[1], full[2], ranked[0]].filter((n): n is string => !!n);
+  const chain = [preferred, lite[0], full[0], lite[1], full[1], full[2], ranked[0]].filter((n): n is string => !!n);
   return [...new Set(chain)].slice(0, 4);
 }
 
@@ -143,7 +144,7 @@ export async function GET(): Promise<Response> {
     const flash = models.map((m) => m.name.replace(/^models\//, '')).filter((n) => n.includes('flash'));
     return json(200, {
       configured: true,
-      model: process.env.GEMINI_MODEL || pickModel(models),
+      model: fallbackChain(models, process.env.GEMINI_MODEL)[0] ?? null,
       fromEnv: !!process.env.GEMINI_MODEL,
       fallbackOrder: fallbackChain(models, process.env.GEMINI_MODEL),
       flashModels: flash,

@@ -16,6 +16,9 @@ describe('live extraction', () => {
     expect(by('liability').status).toBe('changed');
     expect(by('liability').quoteVerified).toBe(false);
     expect(by('law').status).toBe('missing');
+    // a leading clause number does not count as a change
+    const numbered = asLive().map((t) => (t.key === 'notice' ? { ...t, quote: '2. ' + t.quote } : t));
+    expect(diffTerms(bright, numbered).find((r) => r.key === 'notice')!.status).toBe('matched');
   });
 
   it('falls back when the function is missing, errors or returns HTML', async () => {

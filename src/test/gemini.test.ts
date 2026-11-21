@@ -20,10 +20,10 @@ describe('Gemini model choice', () => {
 });
 
 describe('Gemini fallback order', () => {
-  it('tries the best Flash, then the best Flash-Lite, then older Flash models', async () => {
+  it('tries the best Flash-Lite, then the best Flash, then the next of each', async () => {
     const { fallbackChain } = await import('../../api/extract');
     const models = m('gemini-2.5-flash', 'gemini-3.5-flash', 'gemini-3.5-flash-lite', 'gemini-3.7-flash', 'gemini-3.8-flash', 'gemini-3-flash-preview');
-    expect(fallbackChain(models)).toEqual(['gemini-3.8-flash', 'gemini-3.5-flash-lite', 'gemini-3.7-flash', 'gemini-3.5-flash']);
+    expect(fallbackChain(models)).toEqual(['gemini-3.5-flash-lite', 'gemini-3.8-flash', 'gemini-3.7-flash', 'gemini-3.5-flash']);
     expect(fallbackChain(models, 'gemini-2.5-flash')[0]).toBe('gemini-2.5-flash');
   });
 });
