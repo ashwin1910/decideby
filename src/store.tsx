@@ -7,8 +7,11 @@ import { assignOwner, computeDates, scheduleOf, stageAt, type DateResult, type D
 export interface Outcome {
   newAnnual: number;
   termMonths: number;
+  /** the baseline the savings are measured against (see priceBaseline) */
   autoRenewPrice: number;
   savings: number;
+  /** overcharges and service credits actually recovered */
+  recovered?: number;
   note: string;
   recordedOn: ISODate;
 }
@@ -42,7 +45,15 @@ export interface Row {
   rec?: DecisionRecord;
 }
 
+export interface CreditRequest {
+  requestedOn: ISODate;
+  overcharge: number;
+  serviceCredit: number;
+}
+
 interface Store {
+  credits: Record<string, CreditRequest>;
+  requestCredit: (id: string, r: CreditRequest | undefined) => void;
   offset: number;
   setOffset: (n: number) => void;
   now: ISODate;
@@ -57,6 +68,7 @@ interface Store {
 const Ctx = createContext<Store>(null!);
 export const STORAGE_PREFIX = 'decideby.';
 const KEY = 'decideby.records.v1';
+const CREDITS_KEY = 'decideby.credits.v1';
 
 /** Remove every key this app has ever written, whatever its version suffix. */
 export function clearPersisted() {
@@ -69,11 +81,20 @@ export function clearPersisted() {
   }
 }
 
-function load(): Record<string, DecisionRecord> {
+function loadKey<T>(key: string): Record<string, T> {
   try {
-    return JSON.parse(localStorage.getItem(KEY) ?? '{}');
+    return JSON.parse(localStorage.getItem(key) ?? '{}');
   } catch {
     return {};
+  }
+}
+
+function persist(key: string, value: Record<string, unknown>) {
+  try {
+    if (Object.keys(value).length) localStorage.setItem(key, JSON.stringify(value));
+    else localStorage.removeItem(key);
+  } catch {
+    /* storage unavailable: state lives for this visit only */
   }
 }
 
@@ -87,7 +108,8 @@ const BASE = CONTRACTS.map((c) => {
 
 export function StoreProvider({ children }: { children: ReactNode }) {
   const [offset, setOffset] = useState(0);
-  const [records, setRecords] = useState<Record<string, DecisionRecord>>(load);
+  const [records, setRecords] = useState<Record<string, DecisionRecord>>(() => loadKey<DecisionRecord>(KEY));
+  const [credits, setCredits] = useState<Record<string, CreditRequest>>(() => loadKey<CreditRequest>(CREDITS_KEY));
   const [route, setRoute] = useState(parseHash);
   // Bumped by Reset so every view remounts and drops its local state too.
   const [epoch, setEpoch] = useState(0);
@@ -101,14 +123,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     return () => window.removeEventListener('hashchange', f);
   }, []);
 
-  useEffect(() => {
-    try {
-      if (Object.keys(records).length) localStorage.setItem(KEY, JSON.stringify(records));
-      else localStorage.removeItem(KEY);
-    } catch {
-      /* storage unavailable: state lives for this visit only */
-    }
-  }, [records]);
+  useEffect(() => persist(KEY, records), [records]);
+  useEffect(() => persist(CREDITS_KEY, credits), [credits]);
 
   const now = addDays(GO_LIVE, offset);
   const rows = useMemo<Row[]>(
@@ -129,6 +145,14 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   );
 
   const value: Store = {
+    credits,
+    requestCredit: (id, r) =>
+      setCredits((prev) => {
+        const next = { ...prev };
+        if (r) next[id] = r;
+        else delete next[id];
+        return next;
+      }),
     offset,
     setOffset,
     now,
@@ -143,6 +167,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     reset: () => {
       clearPersisted();
       setRecords({});
+      setCredits({});
       setOffset(0);
       setEpoch((e) => e + 1);
       if (location.hash !== '#/triage') location.hash = '#/triage';

@@ -4,7 +4,7 @@ import { COMPANY } from '../data/seed';
 import type { Contract, TermKey } from '../data/types';
 import { addDays, diffDays, fmt, type ISODate } from '../lib/dates';
 import {
-  last12Spend,
+  priceBaseline,
   money,
   person,
   rateCheck,
@@ -106,8 +106,8 @@ export default function Brief({ id }: { id: string }) {
       : { action: 'midterm' as Decision, reasons: [`The window to ${baseReco.action} closed on ${fmt(dr.noticeDeadline)}; the contract has renewed.`, ...baseReco.reasons] }
     : baseReco;
   const actions = windowClosed ? LATE_ACTIONS : ACTIONS;
-  const spend = last12Spend(c);
-  const autoRenewPrice = Math.round(spend * (1 + c.priceIncreasePct / 100));
+  const pb = priceBaseline(c);
+  const autoRenewPrice = pb.baseline;
   const picked = choice && actions.some((a) => a.k === choice) ? choice : reco.action;
   const overriding = picked !== reco.action;
 
@@ -186,20 +186,34 @@ export default function Brief({ id }: { id: string }) {
         </Card>
 
         <div className="stack">
-          <Card title="Price if renewed">
+          <Card title={pb.contracted ? 'Price: increase already contracted' : 'Price if renewed'}>
             <div className="price">
               <div>
-                <div className="muted sm">Last 12 months of spend</div>
-                <div className="big">{money(spend)}</div>
+                <div className="muted sm">Last 12 months billed</div>
+                <div className="big">{money(pb.spend)}</div>
+                {pb.overbilled > 0 && <div className="muted sm">{money(pb.contractedSpend)} at contracted rates</div>}
               </div>
               <div className="arrow">→</div>
               <div>
-                <div className="muted sm">If it auto-renews (+{c.priceIncreasePct}%)</div>
+                <div className="muted sm">
+                  {pb.contracted
+                    ? `Next 12 months: +${pb.pct}% contracted from ${fmt(pb.from)} (${pb.source})`
+                    : pb.pct
+                      ? `Next 12 months if it renews (up to +${pb.pct}%)`
+                      : 'Next 12 months if it renews (fees fixed)'}
+                </div>
                 <div className="big">{money(autoRenewPrice)}</div>
               </div>
             </div>
-            <p className="muted sm">From the price-increase clause applied to actual spend.</p>
+            <p className="muted sm">
+              {pb.contracted && dr.termEnd && pb.from && pb.from < dr.termEnd
+                ? `The increase applies inside the current term (which ends ${fmt(dr.termEnd)}), so it is owed whatever is decided at renewal. `
+                : ''}
+              {pb.explain}
+            </p>
           </Card>
+
+          {(rc.total > 0 || !!c.serviceCredit?.amount) && <CreditCard row={r} overcharge={rc.total} serviceCredit={c.serviceCredit?.amount ?? 0} />}
 
           {c.rateCard && (
             <Card title="Rate check against the contract" aside={rc.findings.length ? <Badge tone="red">{money(rc.total)} over</Badge> : <Badge tone="green">Clean</Badge>}>
@@ -401,8 +415,11 @@ export default function Brief({ id }: { id: string }) {
 }
 
 function OutcomeStep({ row, autoRenewPrice }: { row: Row; autoRenewPrice: number }) {
-  const { records, setRecord, now } = useStore();
+  const { records, setRecord, now, credits } = useStore();
   const rec = records[row.c.id]!;
+  const credit = credits[row.c.id];
+  const [recovered, setRecovered] = useState(String(rec.outcome?.recovered ?? (credit ? credit.overcharge + credit.serviceCredit : 0)));
+  const explain = priceBaseline(row.c).explain;
   const def = rec.decision === 'exit' ? 0 : rec.decision === 'renew' ? autoRenewPrice : Math.round(autoRenewPrice * 0.94);
   const [price, setPrice] = useState(String(rec.outcome?.newAnnual ?? def));
   const [term, setTerm] = useState(String(rec.outcome?.termMonths ?? (rec.decision === 'exit' ? 0 : 12)));
@@ -422,10 +439,15 @@ function OutcomeStep({ row, autoRenewPrice }: { row: Row; autoRenewPrice: number
             <div className="stat-v">{rec.outcome.termMonths ? `${rec.outcome.termMonths} mo` : 'Ended'}</div>
           </div>
           <div className="stat stat-accent">
-            <div className="stat-l">Savings vs auto-renewal</div>
+            <div className="stat-l">Savings vs baseline (per year)</div>
             <div className="stat-v">{money(rec.outcome.savings)}</div>
           </div>
+          <div className="stat">
+            <div className="stat-l">Recovered (credits)</div>
+            <div className="stat-v">{money(rec.outcome.recovered ?? 0)}</div>
+          </div>
         </div>
+        <p className="muted sm">{explain}</p>
         {rec.outcome.note && <p className="muted">“{rec.outcome.note}”</p>}
         <p className="note ok">Recorded {fmt(rec.outcome.recordedOn)}. Next year's brief starts from this outcome.</p>
         <button className="link sm" onClick={() => setRecord(row.c.id, { ...rec, outcome: undefined })}>
@@ -445,20 +467,26 @@ function OutcomeStep({ row, autoRenewPrice }: { row: Row; autoRenewPrice: number
           <span>New term (months, 0 if ended)</span>
           <input type="number" value={term} onChange={(e) => setTerm(e.target.value)} />
         </label>
+        <label className="field">
+          <span>Recovered ($, credits received)</span>
+          <input type="number" value={recovered} onChange={(e) => setRecovered(e.target.value)} />
+        </label>
         <label className="field grow">
           <span>Note</span>
           <input value={note} onChange={(e) => setNote(e.target.value)} placeholder="e.g. 6% increase withdrawn; overcharge credited" />
         </label>
       </div>
       <p>
-        Auto-renewal price {money(autoRenewPrice)} → savings <b className={savings >= 0 ? 'tone-green' : 'tone-red'}>{money(savings)}</b> a year.
+        Baseline {money(autoRenewPrice)} → savings <b className={savings >= 0 ? 'tone-green' : 'tone-red'}>{money(savings)}</b> a year
+        {Number(recovered) > 0 && <>, plus {money(Number(recovered))} recovered once</>}.
       </p>
+      <p className="muted sm">{explain}</p>
       <button
         className="primary"
         onClick={() =>
           setRecord(row.c.id, {
             ...rec,
-            outcome: { newAnnual: Number(price || 0), termMonths: Number(term || 0), autoRenewPrice, savings, note, recordedOn: now },
+            outcome: { newAnnual: Number(price || 0), termMonths: Number(term || 0), autoRenewPrice, savings, recovered: Number(recovered || 0), note, recordedOn: now },
           })
         }
       >
@@ -555,5 +583,48 @@ function SendStep({
       <b>{title}</b>
       {body}
     </div>
+  );
+}
+
+function CreditCard({ row, overcharge, serviceCredit }: { row: Row; overcharge: number; serviceCredit: number }) {
+  const { credits, requestCredit, now } = useStore();
+  const { c } = row;
+  const req = credits[c.id];
+  const total = overcharge + serviceCredit;
+  const ap = person('p-ap5')!;
+  const draft = `To: ${supplierOf(c).name} — accounts receivable (${c.notice.address})
+Cc: ${ap.name}, ${ap.title}, Accounts Payable, ${COMPANY}
+
+Re: Request for credit note — ${c.title}
+
+Please issue a credit note for ${money(total)}:${overcharge ? `
+- ${money(overcharge)} billed above the contracted rates (increase billed before its effective date); invoice lines attached.` : ''}${serviceCredit ? `
+- about ${money(serviceCredit)} service credit under the clause “${c.serviceCredit!.clause}”` : ''}
+
+${person('p-proc')!.name}
+${person('p-proc')!.title}, ${COMPANY}`;
+  return (
+    <Card title="Money to recover" aside={<Badge tone="amber">{money(total)}</Badge>}>
+      <p className="sm">
+        {overcharge > 0 && <>{money(overcharge)} overbilled</>}
+        {overcharge > 0 && serviceCredit > 0 && ' + '}
+        {serviceCredit > 0 && <>about {money(serviceCredit)} service credit</>}. Raise it now; it does not depend on the renewal decision.
+      </p>
+      {req ? (
+        <>
+          <pre className="letter">{draft}</pre>
+          <p className="note ok">
+            Credit note requested on {fmt(req.requestedOn)}; Accounts Payable copied. Record the amount received in the outcome.
+            <button className="link sm" onClick={() => requestCredit(c.id, undefined)}>
+              Undo
+            </button>
+          </p>
+        </>
+      ) : (
+        <button className="primary sm" onClick={() => requestCredit(c.id, { requestedOn: now, overcharge, serviceCredit })}>
+          Request credit note
+        </button>
+      )}
+    </Card>
   );
 }

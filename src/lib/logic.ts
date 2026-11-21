@@ -339,6 +339,50 @@ export function last12Spend(c: Contract) {
   return INVOICES.filter((i) => i.supplierId === c.supplierId).reduce((a, i) => a + i.amount, 0);
 }
 
+/** A price increase already written into the contract (e.g. by amendment), not merely allowed on renewal. */
+export function contractedIncrease(c: Contract): { pct: number; from: ISODate; source: string } | null {
+  const r = c.rateCard?.find((x) => x.increaseEffective && x.increasePct);
+  if (!r) return null;
+  const amend = c.docs.find((d) => d.kind === 'amendment' && d.text.includes('increase'));
+  return { pct: r.increasePct!, from: r.increaseEffective!, source: amend?.title.split(' — ')[0] ?? 'the contract' };
+}
+
+export interface PriceBaseline {
+  spend: number; // last 12 months as billed
+  overbilled: number; // billed above the contract
+  contractedSpend: number; // last 12 months at contracted rates
+  baseline: number; // what the next 12 months would cost if nothing changes
+  pct: number;
+  contracted: boolean; // the increase is already contracted, not just allowed
+  from?: ISODate;
+  source?: string;
+  explain: string;
+}
+
+/** What the company would actually pay over the next 12 months if nothing changes. Savings are measured against this. */
+export function priceBaseline(c: Contract): PriceBaseline {
+  const spend = last12Spend(c);
+  const overbilled = rateCheck(c).total;
+  const contractedSpend = spend - overbilled;
+  const ci = contractedIncrease(c);
+  const excl = overbilled ? `, excluding ${money(overbilled)} overbilled` : '';
+  if (ci) {
+    return {
+      spend, overbilled, contractedSpend, pct: ci.pct, contracted: true, from: ci.from, source: ci.source,
+      baseline: Math.round(contractedSpend * (1 + ci.pct / 100)),
+      explain: `Baseline = last 12 months at contracted rates (${money(contractedSpend)}${excl}) plus the ${ci.pct}% increase already contracted from ${fmt(ci.from)} in ${ci.source}.`,
+    };
+  }
+  const pct = c.priceIncreasePct;
+  return {
+    spend, overbilled, contractedSpend, pct, contracted: false,
+    baseline: Math.round(contractedSpend * (1 + pct / 100)),
+    explain: pct
+      ? `Baseline = last 12 months at contracted rates (${money(contractedSpend)}${excl}) plus the maximum +${pct}% the price clause allows on renewal.`
+      : `Baseline = last 12 months at contracted rates (${money(contractedSpend)}${excl}); fees are fixed.`,
+  };
+}
+
 export interface RateFinding {
   invoiceId: string;
   date: ISODate;
