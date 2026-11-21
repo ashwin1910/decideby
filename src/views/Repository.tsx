@@ -3,7 +3,7 @@ import { Badge, Card, Stat, TermStatusBadge, TierBadge } from '../components';
 import { CONTRACTS, COST_CENTRES, INVOICES, SUPPLIERS } from '../data/seed';
 import type { TermKey } from '../data/types';
 import { fmt } from '../lib/dates';
-import { moneyK, person, supplierOf, TERM_LABEL, termStatus, tierOf } from '../lib/logic';
+import { ACTION_TERMS, moneyK, person, supplierOf, TERM_LABEL, termStatus, tierOf } from '../lib/logic';
 import { parseQuery, runQuery } from '../lib/search';
 import { useStore } from '../store';
 import { inScope } from './Triage';
@@ -37,11 +37,13 @@ export default function Repository() {
   const cols: TermKey[] = citeKeys.length ? citeKeys : show.owner || show.due ? [] : ['renewal'];
   const partial = unparsed.length > 0;
 
-  const queue = CONTRACTS.flatMap((c) =>
-    c.terms
-      .map((t) => ({ c, t, s: termStatus(c, t.key) }))
-      .filter((x) => x.s !== 'trusted'),
-  ).sort((a, b) => ['unverified', 'notFound', 'verify'].indexOf(a.s) - ['unverified', 'notFound', 'verify'].indexOf(b.s) || a.t.confidence - b.t.confidence);
+  // Every term that isn't plainly trusted...
+  const flagged = rows.flatMap((r) => r.c.terms.map((t) => ({ r, c: r.c, t, s: termStatus(r.c, t.key) })).filter((x) => x.s !== 'trusted'));
+  // ...but Legal reviews only the documented rule: a term that triggers an action AND is low-confidence or on a large contract.
+  const inRule = (x: (typeof flagged)[number]) => ACTION_TERMS.includes(x.t.key) && (x.t.confidence < 0.8 || tierOf(x.c) === 'large');
+  const byDeadline = (a: (typeof flagged)[number], b: (typeof flagged)[number]) => a.r.dr.decideBy.localeCompare(b.r.dr.decideBy) || a.t.confidence - b.t.confidence;
+  const queue = flagged.filter(inRule).sort(byDeadline);
+  const outside = flagged.filter((x) => !inRule(x)).sort(byDeadline);
 
   const ownerOf = (sid: string) => {
     const s = SUPPLIERS.find((x) => x.id === sid)!;
@@ -245,7 +247,14 @@ export default function Repository() {
         </p>
       </Card>
 
-      <Card title={`Legal review queue · ${queue.length} terms`} aside={<span className="muted sm">Only flagged terms — everything else is trusted, with its quote one click away</span>}>
+      <Card
+        title={`Legal review queue · ${queue.length} terms`}
+        aside={
+          <span className="muted sm">
+            {flagged.length} flagged → {queue.length} after the rule: action terms that are low-confidence or on a large contract. Sorted by days to decide-by.
+          </span>
+        }
+      >
         <div className="table-wrap">
           <table className="tbl">
             <thead>
@@ -258,7 +267,7 @@ export default function Repository() {
               </tr>
             </thead>
             <tbody>
-              {queue.map(({ c, t, s }) => {
+              {queue.map(({ r, c, t, s }) => {
                 const k = c.id + t.key;
                 return (
                   <tr key={k}>
@@ -266,8 +275,9 @@ export default function Repository() {
                       <button className="link" onClick={() => go('contract/' + c.id)}>
                         {supplierOf(c).name}
                       </button>
-                      <div>
+                      <div className="row gap">
                         <TierBadge tier={tierOf(c)} />
+                        <span className="muted sm">decide by {fmt(r.dr.decideBy)}</span>
                       </div>
                     </td>
                     <td>{TERM_LABEL[t.key]}</td>
@@ -299,6 +309,23 @@ export default function Repository() {
             </tbody>
           </table>
         </div>
+        {outside.length > 0 && (
+          <details className="outside">
+            <summary>
+              {outside.length} quote problems outside the rule (not-found or not-verbatim on terms that trigger no action) — kept visible, not sent to Legal
+            </summary>
+            <ul>
+              {outside.map(({ c, t, s }) => (
+                <li key={c.id + t.key}>
+                  <button className="link" onClick={() => go('contract/' + c.id)}>
+                    {supplierOf(c).name}
+                  </button>{' '}
+                  · {TERM_LABEL[t.key]} · <TermStatusBadge s={s} />
+                </li>
+              ))}
+            </ul>
+          </details>
+        )}
       </Card>
     </div>
   );

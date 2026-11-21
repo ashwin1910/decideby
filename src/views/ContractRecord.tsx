@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Badge, Card, StageBadge, TermStatusBadge, TierBadge } from '../components';
+import { Badge, Card, ReassignOwner, StageBadge, TermStatusBadge, TierBadge } from '../components';
 import { fmt, fmtWd, diffDays } from '../lib/dates';
 import { money, quoteFound, supplierOf, TERM_LABEL, termStatus, tierOf, TYPE_LABEL, computeDates } from '../lib/logic';
 import { GO_LIVE } from '../data/seed';
@@ -199,7 +199,7 @@ export default function ContractRecord({ id }: { id: string }) {
               <li key={i}>{x}</li>
             ))}
           </ul>
-          <p className="muted sm">The owner can reassign in one tap.</p>
+          <ReassignOwner contractId={c.id} currentName={owner.owner.name} />
         </Card>
       </div>
 

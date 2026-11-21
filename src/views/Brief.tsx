@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Badge, Card, DaysLeft, StageBadge, TierBadge } from '../components';
+import { Badge, Card, DaysLeft, ReassignOwner, StageBadge, TierBadge } from '../components';
 import { COMPANY } from '../data/seed';
 import type { Contract, TermKey } from '../data/types';
 import { addDays, diffDays, fmt, type ISODate } from '../lib/dates';
@@ -118,7 +118,7 @@ export default function Brief({ id }: { id: string }) {
       recommended: reco.action,
       overrideReason: overriding && !protective ? reason.trim() : undefined,
       decidedOn: now,
-      decidedBy: protective ? `${person('p-proc')!.name} (protective notice)` : owner.owner.name,
+      decidedBy: protective ? `${person('p-proc')!.name} (protective notice)` : actor.label,
       protective,
     };
     if (needsNotice(c, d)) {
@@ -126,6 +126,12 @@ export default function Brief({ id }: { id: string }) {
     }
     setRecord(c.id, r2);
   };
+
+  // Once procurement has taken over (or the decide-by date has passed), procurement decides, not the owner.
+  const procTook = r.stage === 'takeover' || r.stage === 'overdue';
+  const actor = procTook
+    ? { label: `${person('p-proc')!.name} (Procurement, took over from ${owner.owner.name})` }
+    : { label: owner.owner.name };
 
   const update = (patch: Partial<DecisionRecord>) => setRecord(c.id, { ...rec!, ...patch });
 
@@ -145,6 +151,7 @@ export default function Brief({ id }: { id: string }) {
           <p className="muted">
             For <b>{owner.owner.name}</b> ({owner.owner.title}), budget owner of {owner.costCentre}. Consulted: {owner.approver.name}.
           </p>
+          <ReassignOwner contractId={c.id} currentName={owner.owner.name} />
           <div className="row gap">
             <TierBadge tier={tier} />
             <StageBadge stage={r.stage} />
@@ -216,7 +223,7 @@ export default function Brief({ id }: { id: string }) {
           {(rc.total > 0 || !!c.serviceCredit?.amount) && <CreditCard row={r} overcharge={rc.total} serviceCredit={c.serviceCredit?.amount ?? 0} />}
 
           {c.rateCard && (
-            <Card title="Rate check against the contract" aside={rc.findings.length ? <Badge tone="red">{money(rc.total)} over</Badge> : <Badge tone="green">Clean</Badge>}>
+            <Card title="Rate check against the contract" aside={rc.findings.length ? <Badge tone="red">{money(rc.total)} over</Badge> : rc.checked ? <Badge tone="green">Clean</Badge> : <Badge>Not checkable</Badge>}>
               {rc.findings.length ? (
                 <>
                   <p>
@@ -248,7 +255,7 @@ export default function Brief({ id }: { id: string }) {
                   </div>
                 </>
               ) : (
-                <p className="muted">{rc.checked ? `${rc.checked} invoices checked line by line; all at or below the rate card.` : 'Rate card on file; invoices are billed as totals, so only the total was compared.'}</p>
+                <p className="muted">{rc.checked ? `${rc.checked} invoices checked line by line; all at or below the rate card.` : 'Not checkable: invoices are billed as totals, with no unit prices to compare against the rate card.'}</p>
               )}
             </Card>
           )}
@@ -323,7 +330,14 @@ export default function Brief({ id }: { id: string }) {
             )}
             <div className={`choices ${windowClosed ? 'two-up' : ''}`}>
               {actions.map((a) => (
-                <button key={a.k} className={`choice ${picked === a.k ? 'on' : ''}`} onClick={() => setChoice(a.k)}>
+                <button
+                  key={a.k}
+                  type="button"
+                  className={`choice ${picked === a.k ? 'on' : ''}`}
+                  aria-pressed={picked === a.k}
+                  aria-label={`${a.label}: ${a.desc}${reco.action === a.k ? ' (recommended)' : ''}`}
+                  onClick={() => setChoice(a.k)}
+                >
                   <b>{a.label}</b>
                   <span>{a.desc}</span>
                   {reco.action === a.k && <em>recommended</em>}
@@ -340,7 +354,7 @@ export default function Brief({ id }: { id: string }) {
               <button className="primary" disabled={overriding && reason.trim().length < 5} onClick={() => decide()}>
                 {tier === 'small' ? `Confirm “${DECISION_LABEL[picked]}” (one tap)` : `Record decision: ${DECISION_LABEL[picked]}`}
               </button>
-              <span className="muted sm">as {owner.owner.name}</span>
+              <span className="muted sm">as {actor.label}</span>
             </div>
             {canProtect && (
               <div className="note bad">

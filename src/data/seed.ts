@@ -317,7 +317,13 @@ const families: Spec[] = [
       { item: 'Chicago–Toledo FTL', unit: 'load', rate: 1150 },
       { item: 'Toledo–Detroit FTL', unit: 'load', rate: 640 },
     ],
-    approverAnswers: { stillUsed: 'partly', performance: 'mixed', wouldMiss: 'no', note: 'Most Midwest lanes moved to Atlas Freight in May; only Toledo–Detroit left.' },
+    approverAnswers: {
+      stillUsed: 'partly',
+      performance: 'mixed',
+      wouldMiss: 'no',
+      note: 'Most Midwest lanes moved to Atlas Freight in May; only Toledo–Detroit left.',
+      remainingGoesTo: 'Atlas Freight Lines, which already runs the other Midwest lanes',
+    },
     answerKey: { windowOpen: '2026-12-16', noticeDeadline: '2027-01-15', decideBy: '2026-12-31' },
   },
   {
@@ -335,7 +341,13 @@ const families: Spec[] = [
     dates: { type: 'evergreen', effective: '2023-02-10', noticeDays: 60, noticeUnit: 'calendar' },
     tfcDays: 60, priceIncreasePct: 0, liability: 'the fees paid in the prior six months', law: 'New York', audit: false,
     noticeAddress: 'by email to accounts@paperleaf.example',
-    approverAnswers: { stillUsed: 'partly', performance: 'good', wouldMiss: 'no', note: 'We order most supplies through the new marketplace account now.' },
+    approverAnswers: {
+      stillUsed: 'partly',
+      performance: 'good',
+      wouldMiss: 'no',
+      note: 'We order most supplies through the new marketplace account now.',
+      remainingGoesTo: 'the office-supplies marketplace account',
+    },
     answerKey: { decideBy: '2027-02-10' },
   },
   {
@@ -517,6 +529,8 @@ function buildInvoices(): Invoice[] {
         const centre = COST_CENTRES.find((c) => c.id === cc)!;
         let amount = Math.round((s.annualSpend / s.monthsPaid) * share * (0.9 + r() * 0.2));
         let lines;
+        // Northwind: most lanes moved to Atlas Freight in May 2026; only one lane is left.
+        if (s.id === 's-northwind' && m >= '2026-05-01') amount = Math.round(amount * 0.2);
         if (s.id === 's-brightstaff' && cc === 'CC-100') {
           // From September 2026 the 6% increase is billed, though it only takes effect on 1 Jan 2027.
           const early = m >= '2026-09-01';

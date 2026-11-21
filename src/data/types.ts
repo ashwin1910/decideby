@@ -79,6 +79,8 @@ export interface ApproverAnswers {
   performance: 'good' | 'mixed' | 'poor';
   wouldMiss: 'yes' | 'somewhat' | 'no';
   note?: string;
+  /** where any remaining use would move on exit (e.g. another supplier already on contract) */
+  remainingGoesTo?: string;
 }
 
 export type NoticeMethod = 'courier' | 'certified' | 'email';

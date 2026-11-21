@@ -1,7 +1,7 @@
 import { createContext, Fragment, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
-import { CONTRACTS, GO_LIVE } from './data/seed';
+import { CONTRACTS, GO_LIVE, PEOPLE } from './data/seed';
 import type { Contract } from './data/types';
-import { addDays, type ISODate } from './lib/dates';
+import { addDays, fmt, type ISODate } from './lib/dates';
 import { assignOwner, computeDates, scheduleOf, stageAt, type DateResult, type Decision, type OwnerResult, type Schedule, type Stage } from './lib/logic';
 
 export interface Outcome {
@@ -51,7 +51,14 @@ export interface CreditRequest {
   serviceCredit: number;
 }
 
+export interface OwnerOverride {
+  personId: string;
+  on: ISODate;
+}
+
 interface Store {
+  owners: Record<string, OwnerOverride>;
+  reassign: (id: string, o: OwnerOverride | undefined) => void;
   credits: Record<string, CreditRequest>;
   requestCredit: (id: string, r: CreditRequest | undefined) => void;
   offset: number;
@@ -69,6 +76,7 @@ const Ctx = createContext<Store>(null!);
 export const STORAGE_PREFIX = 'decideby.';
 const KEY = 'decideby.records.v1';
 const CREDITS_KEY = 'decideby.credits.v1';
+const OWNERS_KEY = 'decideby.owners.v1';
 
 /** Remove every key this app has ever written, whatever its version suffix. */
 export function clearPersisted() {
@@ -110,6 +118,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const [offset, setOffset] = useState(0);
   const [records, setRecords] = useState<Record<string, DecisionRecord>>(() => loadKey<DecisionRecord>(KEY));
   const [credits, setCredits] = useState<Record<string, CreditRequest>>(() => loadKey<CreditRequest>(CREDITS_KEY));
+  const [owners, setOwners] = useState<Record<string, OwnerOverride>>(() => loadKey<OwnerOverride>(OWNERS_KEY));
   const [route, setRoute] = useState(parseHash);
   // Bumped by Reset so every view remounts and drops its local state too.
   const [epoch, setEpoch] = useState(0);
@@ -125,11 +134,26 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => persist(KEY, records), [records]);
   useEffect(() => persist(CREDITS_KEY, credits), [credits]);
+  useEffect(() => persist(OWNERS_KEY, owners), [owners]);
 
   const now = addDays(GO_LIVE, offset);
   const rows = useMemo<Row[]>(
     () =>
-      BASE.map((b) => {
+      BASE.map((base) => {
+        const ov = owners[base.c.id];
+        const p = ov && PEOPLE.find((x) => x.id === ov.personId);
+        const b = p
+          ? {
+              ...base,
+              owner: {
+                ...base.owner,
+                owner: p,
+                manager: PEOPLE.find((x) => x.id === p.managerId),
+                reason: [...base.owner.reason, `Reassigned to ${p.name} on ${fmt(ov.on)}.`],
+                reassigned: true,
+              },
+            }
+          : base;
         const rec = records[b.c.id];
         const decided = !!rec && rec.decidedOn <= now;
         const sent = rec?.letter?.status === 'sent' && rec.letter.sentOn && rec.letter.sentOn <= now ? rec.letter.sentOn : undefined;
@@ -141,10 +165,18 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         );
         return { ...b, rec: decided ? rec : undefined, stage };
       }),
-    [records, now],
+    [records, now, owners],
   );
 
   const value: Store = {
+    owners,
+    reassign: (id, o) =>
+      setOwners((prev) => {
+        const next = { ...prev };
+        if (o) next[id] = o;
+        else delete next[id];
+        return next;
+      }),
     credits,
     requestCredit: (id, r) =>
       setCredits((prev) => {
@@ -168,6 +200,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       clearPersisted();
       setRecords({});
       setCredits({});
+      setOwners({});
       setOffset(0);
       setEpoch((e) => e + 1);
       if (location.hash !== '#/triage') location.hash = '#/triage';

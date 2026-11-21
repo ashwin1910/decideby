@@ -185,6 +185,7 @@ export interface OwnerResult {
   approver: Person;
   manager?: Person;
   reason: string[];
+  reassigned?: boolean;
 }
 
 export function spendByCC(supplierId: string, since?: ISODate) {
@@ -431,20 +432,53 @@ export const DECISION_LABEL: Record<Decision, string> = {
   nextcycle: 'Set next-cycle reminder',
 };
 
+/** "Monthly spend fell 80% since May 2026" when the invoice run-rate has dropped sharply. */
+export function spendDrop(c: Contract): string | null {
+  const inv = INVOICES.filter((i) => i.supplierId === c.supplierId).sort((a, b) => a.date.localeCompare(b.date));
+  if (inv.length < 6) return null;
+  const byMonth = new Map<string, number>();
+  inv.forEach((i) => byMonth.set(i.date.slice(0, 7), (byMonth.get(i.date.slice(0, 7)) ?? 0) + i.amount));
+  const months = [...byMonth.entries()];
+  const avg = (xs: [string, number][]) => xs.reduce((a, [, v]) => a + v, 0) / xs.length;
+  // the break point with the sharpest fall in average monthly spend
+  let best: { k: number; before: number; after: number } | null = null;
+  for (let k = 2; k <= months.length - 2; k++) {
+    const before = avg(months.slice(0, k));
+    const after = avg(months.slice(k));
+    if (!best || after / before < best.after / best.before) best = { k, before, after };
+  }
+  if (!best || best.after >= best.before * 0.5) return null;
+  const [y, m] = months[best.k][0].split('-');
+  const name = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][Number(m) - 1];
+  return `Invoices fell from about ${money(best.before)} to ${money(best.after)} a month from ${name} ${y}.`;
+}
+
 export function recommend(c: Contract): { action: Decision; reasons: string[] } {
   const a = c.approverAnswers;
   const reasons: string[] = [];
   const rc = rateCheck(c);
-  if (a?.stillUsed === 'no' || a?.wouldMiss === 'no') {
-    if (a.stillUsed === 'no') reasons.push('Approver says the supplier is no longer used.');
+  if (a?.stillUsed === 'no') {
+    reasons.push('Approver says the supplier is no longer used.');
     if (a.wouldMiss === 'no') reasons.push('Approver would not miss it.');
     if (a.note) reasons.push(`Approver: “${a.note}”`);
     return { action: 'exit', reasons };
   }
   if (a?.stillUsed === 'partly') {
+    // Still partly used: reduce, unless the remaining use already has somewhere to go.
     reasons.push('Approver says it is only partly used.');
     if (a.note) reasons.push(`Approver: “${a.note}”`);
+    const drop = spendDrop(c);
+    if (drop) reasons.push(drop);
+    if (a.remainingGoesTo && a.wouldMiss === 'no') {
+      reasons.push(`Remaining use moves to ${a.remainingGoesTo}.`);
+      return { action: 'exit', reasons };
+    }
     return { action: 'reduce', reasons };
+  }
+  if (a?.wouldMiss === 'no') {
+    reasons.push('Approver would not miss it.');
+    if (a.note) reasons.push(`Approver: “${a.note}”`);
+    return { action: 'exit', reasons };
   }
   if (a?.note && /seats? paid.*active/.test(a.note)) {
     reasons.push(`Usage below what is paid for: ${a.note}`);

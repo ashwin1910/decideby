@@ -1,4 +1,6 @@
 import type { ReactNode } from 'react';
+import { PEOPLE } from './data/seed';
+import { useStore } from './store';
 import type { Tier } from './data/types';
 import { diffDays, fmt, type ISODate } from './lib/dates';
 import { STAGE_LABEL, TIER_LABEL, type Stage, type TermStatus } from './lib/logic';
@@ -73,5 +75,29 @@ export function Stat({ label, value, sub, tone }: { label: string; value: ReactN
       <div className="stat-v">{value}</div>
       {sub && <div className="stat-s">{sub}</div>}
     </div>
+  );
+}
+
+/** One-tap reassignment of a contract's budget owner. */
+export function ReassignOwner({ contractId, currentName }: { contractId: string; currentName: string }) {
+  const { owners, reassign, now } = useStore();
+  const ov = owners[contractId];
+  const candidates = PEOPLE.filter((p) => !p.id.startsWith('p-ap') && p.id !== 'p-legal');
+  return (
+    <label className="field inline reassign">
+      <span>Reassign to</span>
+      <select
+        aria-label={`Reassign budget owner (currently ${currentName})`}
+        value={ov?.personId ?? ''}
+        onChange={(e) => reassign(contractId, e.target.value ? { personId: e.target.value, on: now } : undefined)}
+      >
+        <option value="">{ov ? 'Original owner (auto-assigned)' : `${currentName} (auto-assigned)`}</option>
+        {candidates.map((p) => (
+          <option key={p.id} value={p.id}>
+            {p.name} — {p.title}
+          </option>
+        ))}
+      </select>
+    </label>
   );
 }

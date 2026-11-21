@@ -280,3 +280,9 @@ nav button.on { background: var(--surface); color: var(--text); box-shadow: var(
   .dispatch-pack { position: absolute; inset: 0; border: 0; }
   .dispatch-pack .letter { max-height: none; border: 0; }
 }
+select { font: inherit; color: var(--text); background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 6px 8px; max-width: 100%; }
+.reassign { margin-top: 8px; flex-wrap: wrap; }
+details.outside { margin-top: 12px; font-size: 13px; }
+details.outside summary { cursor: pointer; color: var(--muted); }
+details.outside ul { margin: 6px 0 0; padding-left: 18px; }
+.row-title { color: var(--text); }

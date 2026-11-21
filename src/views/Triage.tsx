@@ -139,7 +139,17 @@ export default function Triage() {
                 return (
                   <tr key={r.c.id} className="click" onClick={() => go('contract/' + r.c.id)}>
                     <td>
-                      <b>{s.name}</b>
+                      <button
+                        type="button"
+                        className="link row-title"
+                        aria-label={`Open contract record for ${s.name}`}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          go('contract/' + r.c.id);
+                        }}
+                      >
+                        <b>{s.name}</b>
+                      </button>
                       <div className="muted sm">
                         {s.category}
                         {r.c.family && <> · <span title="Synthetic family with a known correct answer">answer-keyed</span></>}
@@ -162,7 +172,9 @@ export default function Triage() {
                     <td className="sm">{r.owner.owner.name}</td>
                     <td>
                       <button
+                        type="button"
                         className="link"
+                        aria-label={`Open brief for ${s.name}`}
                         onClick={(e) => {
                           e.stopPropagation();
                           go('brief/' + r.c.id);
