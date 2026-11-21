@@ -8,7 +8,8 @@ import {
   fmt,
   maxDate,
   minDate,
-  subBusinessDays,
+  onOrBeforeBusinessDay,
+  subBusinessDaysDetail,
   type ISODate,
 } from './dates';
 
@@ -62,6 +63,10 @@ export interface DateResult {
   steps: string[];
 }
 
+const fmtShort = (d: ISODate) => fmt(d).replace(/ \d{4}$/, '');
+/** "(skips 25 Dec, 1 Jan)" when holidays were skipped while counting business days. */
+export const skipsNote = (skipped: ISODate[]) => (skipped.length ? ` (skips ${[...skipped].sort().map(fmtShort).join(', ')})` : '');
+
 function backNotice(end: ISODate, days: number, unit: 'calendar' | 'business' | 'ambiguous', steps: string[]): ISODate {
   if (unit === 'calendar') {
     const d = addDays(end, -days);
@@ -69,15 +74,15 @@ function backNotice(end: ISODate, days: number, unit: 'calendar' | 'business' | 
     return d;
   }
   if (unit === 'business') {
-    const d = subBusinessDays(end, days);
-    steps.push(`Notice deadline = term end ${fmt(end)} − ${days} business days = ${fmt(d)}.`);
+    const { date: d, skipped } = subBusinessDaysDetail(end, days);
+    steps.push(`Notice deadline = term end ${fmt(end)} − ${days} business days${skipsNote(skipped)} = ${fmt(d)}.`);
     return d;
   }
   const cal = addDays(end, -days);
-  const bus = subBusinessDays(end, days);
+  const { date: bus, skipped } = subBusinessDaysDetail(end, days);
   const d = minDate(cal, bus);
   steps.push(
-    `Wording is ambiguous ("days" vs business days). Calendar reading gives ${fmt(cal)}; business-day reading gives ${fmt(bus)}. The deadline leans early: ${fmt(d)}.`,
+    `Wording is ambiguous ("days" vs business days). Calendar reading gives ${fmt(cal)}; business-day reading gives ${fmt(bus)}${skipsNote(skipped)}. The deadline leans early: ${fmt(d)}.`,
   );
   return d;
 }
@@ -89,9 +94,11 @@ export function computeDates(c: Contract, today: ISODate = GO_LIVE): DateResult 
 
   if (d.type === 'fixed') {
     const end = d.fixedEnd!;
-    const decideBy = addDays(end, -LEAD_DAYS[tier]);
+    const raw = addDays(end, -LEAD_DAYS[tier]);
+    const decideBy = onOrBeforeBusinessDay(raw);
     steps.push(`Fixed term ends on ${fmt(end)}; no notice is needed.`);
-    steps.push(`Decide-by = end date − ${TIER_LABEL[tier].toLowerCase()}-tier lead time (${LEAD_DAYS[tier]} days) = ${fmt(decideBy)}.`);
+    steps.push(`Decide-by = end date − ${TIER_LABEL[tier].toLowerCase()}-tier lead time (${LEAD_DAYS[tier]} days) = ${fmt(raw)}.`);
+    if (decideBy !== raw) steps.push(`${fmt(raw)} is not a business day, so decide-by moves back to ${fmt(decideBy)}.`);
     return { termEnd: end, renewalsSoFar: 0, noticeDeadline: null, windowOpen: null, decideBy, steps };
   }
 
@@ -103,9 +110,11 @@ export function computeDates(c: Contract, today: ISODate = GO_LIVE): DateResult 
       review = addMonths(d.effective, 12 * years);
     }
     steps.push(`Evergreen from ${fmt(d.effective)}: no deadline, so a review date is set on each anniversary.`);
+    const decideBy = onOrBeforeBusinessDay(review);
     steps.push(`Next anniversary after ${fmt(today)} = ${fmt(review)} → decide-by.`);
+    if (decideBy !== review) steps.push(`${fmt(review)} is not a business day, so decide-by moves back to ${fmt(decideBy)}.`);
     steps.push(`Notice may be sent any time; ${d.noticeDays} days' notice sets the end date.`);
-    return { termEnd: null, renewalsSoFar: years - 1, noticeDeadline: null, windowOpen: null, decideBy: review, steps };
+    return { termEnd: null, renewalsSoFar: years - 1, noticeDeadline: null, windowOpen: null, decideBy, steps };
   }
 
   // auto or window: roll the term forward
@@ -159,8 +168,10 @@ export function computeDates(c: Contract, today: ISODate = GO_LIVE): DateResult 
     windowOpen = today;
     steps.push('Notice may be sent any time before the deadline.');
   }
-  const decideBy = subBusinessDays(noticeDeadline, BUFFER_BUSINESS_DAYS);
-  steps.push(`Decide-by = notice deadline − ${BUFFER_BUSINESS_DAYS} business days (approval and delivery buffer) = ${fmt(decideBy)}.`);
+  const { date: decideBy, skipped } = subBusinessDaysDetail(noticeDeadline, BUFFER_BUSINESS_DAYS);
+  steps.push(
+    `Decide-by = notice deadline − ${BUFFER_BUSINESS_DAYS} business days (approval and delivery buffer)${skipsNote(skipped)} = ${fmt(decideBy)}.`,
+  );
   return { termEnd: end, renewalsSoFar: renewals, noticeDeadline, windowOpen: maxDate(windowOpen, GO_LIVE), decideBy, missedPrior, steps };
 }
 

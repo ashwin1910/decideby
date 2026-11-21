@@ -1,5 +1,7 @@
 // Date-only arithmetic in UTC. Code, not the model, does all date maths.
-// Business days are Monday–Friday; public holidays are ignored in this prototype.
+// Business days are Monday–Friday, excluding the company holidays in data/holidays.ts.
+
+import { COMPANY_HOLIDAYS } from '../data/holidays';
 
 export type ISODate = string; // YYYY-MM-DD
 
@@ -32,24 +34,38 @@ export function isWeekend(d: ISODate): boolean {
   return w === 0 || w === 6;
 }
 
-/** Move back n business days (n > 0). */
-export function subBusinessDays(d: ISODate, n: number): ISODate {
+export const isHoliday = (d: ISODate): boolean => d in COMPANY_HOLIDAYS;
+export const isBusinessDay = (d: ISODate): boolean => !isWeekend(d) && !isHoliday(d);
+
+/** Move back n business days (n > 0), skipping weekends and company holidays. */
+export function subBusinessDaysDetail(d: ISODate, n: number): { date: ISODate; skipped: ISODate[] } {
   let cur = d;
   let left = n;
+  const skipped: ISODate[] = [];
   while (left > 0) {
     cur = addDays(cur, -1);
-    if (!isWeekend(cur)) left--;
+    if (isBusinessDay(cur)) left--;
+    else if (isHoliday(cur)) skipped.push(cur);
   }
-  return cur;
+  return { date: cur, skipped };
 }
+
+export const subBusinessDays = (d: ISODate, n: number): ISODate => subBusinessDaysDetail(d, n).date;
 
 export function addBusinessDays(d: ISODate, n: number): ISODate {
   let cur = d;
   let left = n;
   while (left > 0) {
     cur = addDays(cur, 1);
-    if (!isWeekend(cur)) left--;
+    if (isBusinessDay(cur)) left--;
   }
+  return cur;
+}
+
+/** The same day if it is a business day, otherwise the previous business day. */
+export function onOrBeforeBusinessDay(d: ISODate): ISODate {
+  let cur = d;
+  while (!isBusinessDay(cur)) cur = addDays(cur, -1);
   return cur;
 }
 

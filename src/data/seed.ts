@@ -1,6 +1,8 @@
 // Seeded company for the prototype. Everything here is synthetic.
 // The nine contract "families" carry an answer key (hand-computed correct dates)
-// that the evaluation page checks the date engine against.
+// that the evaluation page checks the date engine against. Keys were corrected
+// in the review pass to skip company holidays (data/holidays.ts) when counting
+// business days.
 
 import { addDays, addMonths, fmt, type ISODate } from '../lib/dates';
 import type {
@@ -296,7 +298,7 @@ const families: Spec[] = [
       amount: 1380,
     },
     approverAnswers: { stillUsed: 'yes', performance: 'mixed', wouldMiss: 'yes', note: 'Fill rate dropped to about 88% in Q3; no-shows on night shift.' },
-    answerKey: { noticeDeadline: '2027-01-04', decideBy: '2026-12-21' },
+    answerKey: { noticeDeadline: '2027-01-04', decideBy: '2026-12-17' },
     extraDocs: [
       {
         id: 'brightstaff-a1', kind: 'amendment', title: 'Amendment No. 1 — BrightStaff Solutions (adds Shift Lead role)',
@@ -316,7 +318,7 @@ const families: Spec[] = [
       { item: 'Toledo–Detroit FTL', unit: 'load', rate: 640 },
     ],
     approverAnswers: { stillUsed: 'partly', performance: 'mixed', wouldMiss: 'no', note: 'Most Midwest lanes moved to Atlas Freight in May; only Toledo–Detroit left.' },
-    answerKey: { windowOpen: '2026-12-16', noticeDeadline: '2027-01-15', decideBy: '2027-01-01' },
+    answerKey: { windowOpen: '2026-12-16', noticeDeadline: '2027-01-15', decideBy: '2026-12-31' },
   },
   {
     id: 'meridian',
@@ -344,7 +346,7 @@ const families: Spec[] = [
     noticeAddress: 'by email to legal@lumencloud.example',
     rateCard: [{ item: 'Workspace seat', unit: 'seat / month', rate: 30 }],
     approverAnswers: { stillUsed: 'yes', performance: 'good', wouldMiss: 'somewhat', note: '100 seats paid, 64 active in the last 90 days.' },
-    answerKey: { noticeDeadline: '2027-01-30', decideBy: '2027-01-18' },
+    answerKey: { noticeDeadline: '2027-01-30', decideBy: '2027-01-15' },
     extraDocs: [
       {
         id: 'lumen-dup', kind: 'duplicate', title: 'Lumen_MSA_signed (1).pdf', source: 'Procurement mailbox',
@@ -359,7 +361,7 @@ const families: Spec[] = [
     tfcDays: 90, priceIncreasePct: 5, liability: 'five hundred thousand dollars ($500,000)', law: 'Indiana', audit: true,
     noticeAddress: 'by courier to Atlas Freight Lines, Attn: Contracts, 9 Canal St, Indianapolis, IN 46204',
     approverAnswers: { stillUsed: 'yes', performance: 'good', wouldMiss: 'yes', note: 'Took over most Midwest lanes in May; on-time 97%.' },
-    answerKey: { noticeDeadline: '2027-04-07', decideBy: '2027-03-24' },
+    answerKey: { noticeDeadline: '2027-04-05', decideBy: '2027-03-22' },
   },
   {
     id: 'quill',
@@ -368,7 +370,7 @@ const families: Spec[] = [
     tfcDays: 30, priceIncreasePct: 0, liability: 'the fees paid in the prior twelve (12) months', law: 'California', audit: false,
     noticeAddress: 'by email to hello@quillstudio.example',
     approverAnswers: { stillUsed: 'no', performance: 'good', wouldMiss: 'no', note: "Haven't used them since the spring campaign ended in June." },
-    answerKey: { noticeDeadline: '2027-01-04', decideBy: '2026-12-21' },
+    answerKey: { noticeDeadline: '2026-12-31', decideBy: '2026-12-16' },
   },
   {
     id: 'keystone',
@@ -376,7 +378,7 @@ const families: Spec[] = [
     dates: { type: 'auto', effective: '2025-09-30', initialTermMonths: 24, renewalTermMonths: 12, noticeDays: 90, noticeUnit: 'calendar' },
     tfcDays: 30, priceIncreasePct: 3, liability: 'the fees paid under the relevant statement of work', law: 'New York', audit: true,
     noticeAddress: 'by email to engagements@keystone.example',
-    answerKey: { noticeDeadline: '2027-07-02', decideBy: '2027-06-18' },
+    answerKey: { noticeDeadline: '2027-07-02', decideBy: '2027-06-17' },
   },
   {
     id: 'orbit',

@@ -18,3 +18,15 @@ describe('date engine vs answer key', () => {
     if (k.windowOpen) expect(r.windowOpen).toBe(k.windowOpen);
   });
 });
+
+describe('business days skip company holidays', () => {
+  it('BrightStaff decide-by skips 25 Dec and 1 Jan', () => {
+    const r = computeDates(CONTRACTS.find((c) => c.id === 'brightstaff')!);
+    expect(r.decideBy).toBe('2026-12-17');
+    expect(r.steps.join(' ')).toContain('skips 25 Dec, 1 Jan');
+  });
+  it('no decide-by date falls on a weekend or holiday', async () => {
+    const { isBusinessDay } = await import('../lib/dates');
+    CONTRACTS.forEach((c) => expect(isBusinessDay(computeDates(c).decideBy), c.id).toBe(true));
+  });
+});

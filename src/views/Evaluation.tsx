@@ -100,6 +100,11 @@ export default function Evaluation() {
           a contract renewed five times, an ambiguous "days" clause and a business-day notice period. Because even zero too-late deadlines in a small set only bounds
           the true rate, Legal keeps verifying large contracts during the pilot.
         </p>
+        <p className="note">
+          <b>Answer keys corrected for holidays.</b> Business days now skip the company holiday calendar (US federal holidays 2026–27). The earlier keys counted
+          25 Dec and 1 Jan as working days, so six keys moved earlier: BrightStaff decide-by 21 → 17 Dec 2026; Northwind 1 Jan → 31 Dec 2026; Lumen 18 → 15 Jan
+          2027; Atlas 24 → 22 Mar 2027 (notice deadline 7 → 5 Apr); Quill 21 → 16 Dec 2026 (notice deadline 4 Jan → 31 Dec); Keystone 18 → 17 Jun 2027.
+        </p>
       </Card>
 
       <Card title="Test 1 · Reading single contracts (CUAD)" aside={<Badge tone="amber">Not run in this build</Badge>}>
