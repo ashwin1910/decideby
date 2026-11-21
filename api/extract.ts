@@ -113,15 +113,15 @@ export function rankModels(models: ModelInfo[]): string[] {
 export const pickModel = (models: ModelInfo[]): string | null => rankModels(models)[0] ?? null;
 
 /**
- * Models to try, in order: the newest stable Flash-Lite first (it answered in
- * about 3 s with every quote verbatim, while full Flash models took over 12 s or
- * were overloaded), then the best full Flash, then the next of each.
+ * Models to try, in order: the two newest stable Flash-Lite models first (they
+ * answered in about 3 s with every quote verbatim, while full Flash models took
+ * over 12 s or were overloaded), then the best full Flash models.
  */
 export function fallbackChain(models: ModelInfo[], preferred?: string): string[] {
   const ranked = rankModels(models);
   const full = ranked.filter((n) => !/lite/.test(n) && !/preview/.test(n));
   const lite = ranked.filter((n) => /lite/.test(n) && !/preview/.test(n));
-  const chain = [preferred, lite[0], full[0], lite[1], full[1], full[2], ranked[0]].filter((n): n is string => !!n);
+  const chain = [preferred, lite[0], lite[1], full[0], full[1], ranked[0]].filter((n): n is string => !!n);
   return [...new Set(chain)].slice(0, 4);
 }
 
