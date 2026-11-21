@@ -71,7 +71,12 @@ export async function runLiveExtraction(c: Contract, fetchImpl: typeof fetch = f
       body: JSON.stringify({ docs: c.docs.map(({ id, kind, title, signedOn, text }) => ({ id, kind, title, signedOn, text })) }),
       signal: ctrl.signal,
     });
-    if (!res.ok || !(res.headers.get('content-type') ?? '').includes('application/json')) return { ok: false, reason: `HTTP ${res.status}` };
+    const isJson = (res.headers.get('content-type') ?? '').includes('application/json');
+    if (!res.ok || !isJson) {
+      const err = isJson ? ((await res.json().catch(() => ({}))) as { error?: string; status?: number; detail?: string }) : {};
+      const why = err.error === 'not_configured' ? 'no API key set' : err.detail ?? (err.status ? `Google returned ${err.status}` : err.error);
+      return { ok: false, reason: `HTTP ${res.status}${why ? ` — ${why}` : ''}` };
+    }
     const body = (await res.json()) as { model?: string; terms?: LiveTerm[] };
     if (!Array.isArray(body.terms)) return { ok: false, reason: 'bad response' };
     return { ok: true, model: body.model ?? 'Gemini', rows: diffTerms(c, body.terms), at: new Date() };

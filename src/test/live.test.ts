@@ -32,4 +32,11 @@ describe('live extraction', () => {
     const r = await runLiveExtraction(bright, ok as typeof fetch);
     expect(r.ok && r.rows.every((x) => x.status === 'matched')).toBe(true);
   });
+
+  it('explains why the model was unavailable', async () => {
+    const refused = async () =>
+      new Response(JSON.stringify({ error: 'upstream', status: 404, detail: 'models/x is not found' }), { status: 502, headers: { 'content-type': 'application/json' } });
+    const r = await runLiveExtraction(bright, refused as typeof fetch);
+    expect(r.ok === false && r.reason).toBe('HTTP 502 — models/x is not found');
+  });
 });

@@ -3,18 +3,23 @@
 //
 // Env vars (set in Vercel → Settings → Environment Variables):
 //   GEMINI_API_KEY  required — from Google AI Studio (aistudio.google.com)
-//   GEMINI_MODEL    optional — defaults to DEFAULT_MODEL below
+//   GEMINI_MODEL    optional — a model name such as the one shown in Google AI Studio.
+//                   If unset, the function asks Google which models this key can use
+//                   and picks the newest stable Flash model (see pickModel).
+//
+// GET /api/extract reports whether a key is configured and which model is used
+// (never the key itself), so the setup can be checked from a browser.
 
-const DEFAULT_MODEL = 'gemini-2.5-flash';
+const API = 'https://generativelanguage.googleapis.com/v1beta';
 const TIMEOUT_MS = 18_000;
 const MAX_CHARS = 60_000;
 
-const TERM_KEYS = [
+export const TERM_KEYS = [
   'parties', 'effective', 'end', 'renewal', 'notice', 'tfc', 'priceIncrease',
   'minCommit', 'liability', 'assignment', 'law', 'audit', 'payment', 'noticeAddress',
 ] as const;
 
-const TERM_HELP: Record<(typeof TERM_KEYS)[number], string> = {
+export const TERM_HELP: Record<(typeof TERM_KEYS)[number], string> = {
   parties: 'the contracting parties',
   effective: 'effective date',
   end: 'end date or length of the current term (after amendments)',
@@ -53,7 +58,7 @@ const RESPONSE_SCHEMA = {
   },
 };
 
-const SYSTEM =
+export const SYSTEM =
   'You extract terms from a supplier contract family (a signed agreement plus any amendments). ' +
   'Later-signed amendments override the original agreement. For every term, copy the supporting sentence ' +
   'exactly as written - character for character - into "quote", and give the id of the document it came from. ' +
@@ -76,10 +81,65 @@ interface GeminiResponse {
 const json = (status: number, body: unknown) =>
   new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
 
+interface ModelInfo {
+  name: string; // "models/gemini-..."
+  supportedGenerationMethods?: string[];
+}
+
+/**
+ * Choose a model from the ones this key can call: Flash models that support
+ * generateContent, newest version first, stable before preview, full Flash before
+ * Flash-Lite. Specialised variants (image, audio, TTS, live, embedding) are skipped.
+ */
+export function pickModel(models: ModelInfo[]): string | null {
+  const ranked = models
+    .filter((m) => m.supportedGenerationMethods?.includes('generateContent'))
+    .map((m) => m.name.replace(/^models\//, ''))
+    .filter((n) => /^gemini-[\d.]+-flash/.test(n) && !/image|audio|tts|live|embed|thinking|exp/.test(n))
+    .map((n) => ({
+      n,
+      version: Number(/^gemini-([\d.]+)/.exec(n)![1].split('.').slice(0, 2).join('.')),
+      preview: /preview/.test(n),
+      lite: /lite/.test(n),
+      dated: /-\d{2,}(-|$)/.test(n.replace(/^gemini-[\d.]+/, '')),
+    }))
+    .sort((a, b) => b.version - a.version || +a.preview - +b.preview || +a.lite - +b.lite || +a.dated - +b.dated || a.n.length - b.n.length);
+  return ranked[0]?.n ?? null;
+}
+
+let cachedModel: string | null = null;
+
+async function listModels(key: string, signal?: AbortSignal): Promise<ModelInfo[]> {
+  const res = await fetch(`${API}/models?pageSize=1000`, { headers: { 'x-goog-api-key': key }, signal });
+  if (!res.ok) throw new Error(`list_models_${res.status}`);
+  return ((await res.json()) as { models?: ModelInfo[] }).models ?? [];
+}
+
+async function resolveModel(key: string, signal?: AbortSignal): Promise<string> {
+  if (process.env.GEMINI_MODEL) return process.env.GEMINI_MODEL;
+  if (cachedModel) return cachedModel;
+  const picked = pickModel(await listModels(key, signal));
+  if (!picked) throw new Error('no_flash_model');
+  cachedModel = picked;
+  return picked;
+}
+
+/** Setup check: is a key configured, and which model would be used? Never returns the key. */
+export async function GET(): Promise<Response> {
+  const key = process.env.GEMINI_API_KEY;
+  if (!key) return json(200, { configured: false, model: null });
+  try {
+    const models = await listModels(key);
+    const flash = models.map((m) => m.name.replace(/^models\//, '')).filter((n) => n.includes('flash'));
+    return json(200, { configured: true, model: process.env.GEMINI_MODEL || pickModel(models), fromEnv: !!process.env.GEMINI_MODEL, flashModels: flash });
+  } catch (e) {
+    return json(200, { configured: true, model: process.env.GEMINI_MODEL ?? null, error: e instanceof Error ? e.message : 'failed' });
+  }
+}
+
 export async function POST(request: Request): Promise<Response> {
   const key = process.env.GEMINI_API_KEY;
   if (!key) return json(503, { error: 'not_configured' });
-  const model = process.env.GEMINI_MODEL || DEFAULT_MODEL;
 
   let docs: InDoc[];
   try {
@@ -100,7 +160,8 @@ export async function POST(request: Request): Promise<Response> {
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), TIMEOUT_MS);
   try {
-    const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`, {
+    const model = await resolveModel(key, ctrl.signal);
+    const res = await fetch(`${API}/models/${encodeURIComponent(model)}:generateContent`, {
       method: 'POST',
       headers: { 'content-type': 'application/json', 'x-goog-api-key': key },
       body: JSON.stringify({
@@ -110,15 +171,20 @@ export async function POST(request: Request): Promise<Response> {
       }),
       signal: ctrl.signal,
     });
-    if (!res.ok) return json(502, { error: 'upstream', status: res.status });
+    if (!res.ok) {
+      if (res.status === 404) cachedModel = null; // model withdrawn: pick again next time
+      const detail = ((await res.json().catch(() => ({}))) as { error?: { message?: string } }).error?.message;
+      return json(502, { error: 'upstream', status: res.status, model, detail: detail?.slice(0, 200) });
+    }
     const data = (await res.json()) as GeminiResponse;
     if (data.promptFeedback?.blockReason) return json(502, { error: 'blocked' });
     const text = (data.candidates?.[0]?.content?.parts ?? []).map((p) => p.text ?? '').join('');
     const parsed = JSON.parse(text) as { terms?: unknown[] };
     if (!Array.isArray(parsed.terms)) return json(502, { error: 'bad_output' });
     return json(200, { model: data.modelVersion ?? model, terms: parsed.terms });
-  } catch {
-    return json(ctrl.signal.aborted ? 504 : 500, { error: ctrl.signal.aborted ? 'timeout' : 'failed' });
+  } catch (e) {
+    if (ctrl.signal.aborted) return json(504, { error: 'timeout' });
+    return json(502, { error: e instanceof Error ? e.message : 'failed' });
   } finally {
     clearTimeout(timer);
   }
