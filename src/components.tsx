@@ -19,6 +19,7 @@ const STAGE_TONE: Record<Stage, string> = {
   takeover: 'red',
   overdue: 'red',
   decided: 'green',
+  missed: 'red',
 };
 
 export function StageBadge({ stage }: { stage: Stage }) {

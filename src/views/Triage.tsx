@@ -12,14 +12,15 @@ export function inScope(s: (typeof SUPPLIERS)[number]) {
 export function northStar(rows: Row[]) {
   // Renewal-eligible = decide-by date falls inside the 90-day pilot.
   const end = addDays(GO_LIVE, 90);
-  const eligible = rows.filter((r) => r.dr.decideBy <= end);
+  // Missed auto-renewals always count against the north star.
+  const eligible = rows.filter((r) => r.dr.decideBy <= end || r.stage === 'missed');
   const total = eligible.reduce((a, r) => a + supplierOf(r.c).annualSpend, 0);
-  const onTime = eligible.filter((r) => r.rec && r.rec.decidedOn <= r.dr.decideBy);
+  const onTime = eligible.filter((r) => r.rec && r.rec.decidedOn <= r.dr.decideBy && r.stage !== 'missed');
   const done = onTime.reduce((a, r) => a + supplierOf(r.c).annualSpend, 0);
   return { total, done, pct: total ? done / total : 0, n: eligible.length, nDone: onTime.length };
 }
 
-type Filter = 'all' | 'triage' | 'open' | 'decided';
+type Filter = 'all' | 'triage' | 'open' | 'decided' | 'missed';
 
 export default function Triage() {
   const { rows, now, go } = useStore();
@@ -35,13 +36,15 @@ export default function Triage() {
   const sorted = useMemo(
     () =>
       [...rows]
-        .filter((r) => (filter === 'triage' ? r.sch.triage : filter === 'open' ? !r.rec : filter === 'decided' ? !!r.rec : true))
+        .filter((r) =>
+          filter === 'triage' ? r.sch.triage : filter === 'open' ? !r.rec && r.stage !== 'missed' : filter === 'decided' ? r.stage === 'decided' : filter === 'missed' ? r.stage === 'missed' : true,
+        )
         .sort((a, b) => a.dr.decideBy.localeCompare(b.dr.decideBy) || supplierOf(b.c).annualSpend - supplierOf(a.c).annualSpend),
     [rows, filter],
   );
 
   const counts = rows.reduce<Record<Stage, number>>((m, r) => ({ ...m, [r.stage]: (m[r.stage] ?? 0) + 1 }), {} as Record<Stage, number>);
-  const stages: Stage[] = ['brief', 'reminder', 'escalated', 'takeover', 'overdue', 'decided'];
+  const stages: Stage[] = ['scheduled', 'brief', 'reminder', 'escalated', 'takeover', 'overdue', 'missed', 'decided'];
 
   return (
     <div className="stack">
@@ -86,9 +89,9 @@ export default function Triage() {
         title="Renewal queue"
         aside={
           <div className="seg">
-            {(['open', 'triage', 'decided', 'all'] as Filter[]).map((f) => (
+            {(['open', 'triage', 'missed', 'decided', 'all'] as Filter[]).map((f) => (
               <button key={f} className={filter === f ? 'on' : ''} onClick={() => setFilter(f)}>
-                {{ open: 'Undecided', triage: 'Triage', decided: 'Decided', all: 'All' }[f]}
+                {{ open: 'Undecided', triage: 'Triage', missed: 'Missed', decided: 'Decided', all: 'All' }[f]}
               </button>
             ))}
           </div>

@@ -260,7 +260,7 @@ export function scheduleOf(c: Contract, dr: DateResult): Schedule {
   return { triage: false, milestones: ms };
 }
 
-export type Stage = 'scheduled' | 'brief' | 'reminder' | 'escalated' | 'takeover' | 'overdue' | 'decided';
+export type Stage = 'scheduled' | 'brief' | 'reminder' | 'escalated' | 'takeover' | 'overdue' | 'decided' | 'missed';
 
 export const STAGE_LABEL: Record<Stage, string> = {
   scheduled: 'Scheduled',
@@ -270,17 +270,34 @@ export const STAGE_LABEL: Record<Stage, string> = {
   takeover: 'Procurement took over',
   overdue: 'Past decide-by',
   decided: 'Decided',
+  missed: 'Auto-renewed (missed)',
 };
 
-export function stageAt(sch: Schedule, now: ISODate, decided: boolean): Stage {
-  if (decided) return 'decided';
-  let st: Stage = 'scheduled';
-  for (const m of sch.milestones) {
-    if (now < m.date) break;
-    st = m.key === 'brief' ? 'brief' : m.key === 'reminder' ? 'reminder' : m.key === 'escalate' ? 'escalated' : m.key === 'takeover' ? 'takeover' : st;
-    if (m.key === 'decideBy' && now > m.date) st = 'overdue';
-  }
-  return st;
+/** What stageAt needs to know about a recorded decision, as of the simulated date. */
+export interface StageDecision {
+  decision: Decision;
+  decidedOn: ISODate;
+  /** date a valid notice left (email sent / letter dispatched), if it has */
+  sentOn?: ISODate;
+}
+
+/** True when the notice deadline (or window close) has passed without a valid notice or a timely decision to renew. */
+export function isMissed(dr: DateResult, now: ISODate, d?: StageDecision): boolean {
+  if (!dr.noticeDeadline || now <= dr.noticeDeadline) return false;
+  if (!d || d.decidedOn > dr.noticeDeadline) return true;
+  if (d.decision === 'renew') return false;
+  return !(d.sentOn && d.sentOn <= dr.noticeDeadline);
+}
+
+export function stageAt(sch: Schedule, dr: DateResult, now: ISODate, d?: StageDecision): Stage {
+  if (isMissed(dr, now, d)) return 'missed';
+  if (d) return 'decided';
+  if (now > dr.decideBy) return 'overdue';
+  // latest escalation step already reached, by date (not by list order)
+  const rank: Record<Milestone['key'], number> = { brief: 1, reminder: 2, escalate: 3, takeover: 4, decideBy: 0 };
+  const reached = sch.milestones.filter((m) => m.key !== 'decideBy' && m.date <= now).sort((a, b) => rank[b.key] - rank[a.key])[0];
+  if (!reached) return 'scheduled';
+  return ({ brief: 'brief', reminder: 'reminder', escalate: 'escalated', takeover: 'takeover' } as const)[reached.key as Exclude<Milestone['key'], 'decideBy'>];
 }
 
 // ---------------------------------------------------------------------------
