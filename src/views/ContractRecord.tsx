@@ -1,32 +1,32 @@
-import { useEffect, useRef, useState } from 'react';
+import { useState } from 'react';
 import { Badge, Card, ReassignOwner, StageBadge, TermStatusBadge, TierBadge } from '../components';
 import { fmt, fmtWd, diffDays } from '../lib/dates';
-import { money, supplierOf, TERM_LABEL, termStatus, tierOf, TYPE_LABEL } from '../lib/logic';
+import { money, quoteFound, supplierOf, TERM_LABEL, termStatus, tierOf, TYPE_LABEL, computeDates } from '../lib/logic';
+import { GO_LIVE } from '../data/seed';
 import { useStore } from '../store';
-import { REPLAY_STEP_MS, REPLAY_STEPS, replayExtraction, replaySummary, type ReplayResult } from '../lib/replay';
+import { runLiveExtraction, type LiveResult } from '../lib/live';
 
 export default function ContractRecord({ id }: { id: string }) {
   const { rows, now, go } = useStore();
   const r = rows.find((x) => x.c.id === id);
   const [openDoc, setOpenDoc] = useState<string | null>(null);
-  // Replay state: null = idle, a number = animation step in progress, a result = done.
-  const [replay, setReplay] = useState<number | ReplayResult | null>(null);
-  const timers = useRef<number[]>([]);
-  useEffect(() => () => timers.current.forEach((t) => window.clearTimeout(t)), []);
+  const [rerun, setRerun] = useState<'idle' | 'running' | { local: string; live: LiveResult }>('idle');
   if (!r) return <p>Contract not found.</p>;
   const { c, dr, sch, owner } = r;
   const s = supplierOf(c);
   const tier = tierOf(c);
 
-  const runReplay = () => {
-    timers.current.forEach((t) => window.clearTimeout(t));
-    setReplay(0);
-    timers.current = [
-      ...REPLAY_STEPS.slice(1).map((_, i) => window.setTimeout(() => setReplay(i + 1), REPLAY_STEP_MS * (i + 1))),
-      window.setTimeout(() => setReplay(replayExtraction(c, dr)), REPLAY_STEP_MS * REPLAY_STEPS.length),
-    ];
+  const runLive = async () => {
+    setRerun('running');
+    const live = await runLiveExtraction(c);
+    const verified = c.terms.filter((t) => quoteFound(c, t.key)).length;
+    const again = computeDates(c, GO_LIVE);
+    const same = again.decideBy === dr.decideBy && again.noticeDeadline === dr.noticeDeadline;
+    setRerun({
+      local: `${verified} of ${c.terms.length} stored quotes found verbatim in the source documents; dates recalculated in code — ${same ? 'unchanged' : 'CHANGED'}.`,
+      live,
+    });
   };
-  const replaying = typeof replay === 'number';
 
   const windowState = !dr.noticeDeadline
     ? null
@@ -55,7 +55,7 @@ export default function ContractRecord({ id }: { id: string }) {
             <TierBadge tier={tier} />
             <Badge>{TYPE_LABEL[c.dates.type]}</Badge>
             {c.critical && <Badge tone="violet">Business-critical</Badge>}
-            {sch.triage && <Badge>Triage schedule</Badge>}
+            {sch.triage && <Badge tone="red">Triage schedule</Badge>}
             <StageBadge stage={r.stage} />
           </div>
         </div>
@@ -63,22 +63,12 @@ export default function ContractRecord({ id }: { id: string }) {
           <button className="primary" onClick={() => go('brief/' + c.id)}>
             Open owner brief →
           </button>
-          <button className="ghost" onClick={runReplay} disabled={replaying}>
-            ↻ Replay extraction (simulated)
+          <button className="ghost" onClick={runLive} disabled={rerun === 'running'}>
+            {rerun === 'running' ? 'Reading with the model…' : '↻ Re-run live'}
           </button>
-          <p className="muted xs replay-note">Demo uses pre-computed AI extraction; in production this step runs an LLM (e.g. Claude) on each document.</p>
         </div>
       </div>
-      {replaying && (
-        <ol className="replay-steps" role="status" aria-label="Replaying extraction">
-          {REPLAY_STEPS.map((label, i) => (
-            <li key={label} className={i < (replay as number) ? 'done' : i === replay ? 'current' : ''}>
-              {i < (replay as number) ? '✓' : i === replay ? '…' : '·'} {label}
-            </li>
-          ))}
-        </ol>
-      )}
-      {replay !== null && typeof replay === 'object' && <ReplayPanel result={replay} />}
+      {typeof rerun === 'object' && <LivePanel result={rerun.live} local={rerun.local} />}
 
       {dr.missedPrior && (
         <div className="note bad">
@@ -233,23 +223,28 @@ export default function ContractRecord({ id }: { id: string }) {
   );
 }
 
-function ReplayPanel({ result }: { result: ReplayResult }) {
+function LivePanel({ result, local }: { result: LiveResult; local: string }) {
+  if (!result.ok)
+    return (
+      <div className="note warn" role="status">
+        <b>Live model unavailable, showing pre-computed results.</b> <span className="muted sm">({result.reason})</span>
+        <div className="sm">{local}</div>
+      </div>
+    );
   const n = (st: string) => result.rows.filter((r) => r.status === st).length;
   return (
     <Card
-      title={replaySummary(result)}
+      title={`Live re-read by ${result.model} at ${result.at.toLocaleTimeString()}`}
       aside={
         <div className="row gap">
           <Badge tone="green">{n('matched')} matched</Badge>
-          {n('changed') > 0 && <Badge tone="amber">{n('changed')} changed</Badge>}
-          {n('new') > 0 && <Badge tone="blue">{n('new')} new</Badge>}
+          <Badge tone="amber">{n('changed')} changed</Badge>
+          <Badge tone="blue">{n('new')} new</Badge>
           {n('missing') > 0 && <Badge tone="red">{n('missing')} missing</Badge>}
         </div>
       }
     >
-      <p className="muted sm">
-        Replayed at {result.at.toLocaleTimeString()} from the pre-computed extraction. The verbatim-quote check and the date calculation ran again in code.
-      </p>
+      <p className="muted sm">{local} The model's quotes are put through the same verbatim check.</p>
       <div className="table-wrap">
         <table className="tbl compact">
           <thead>
@@ -257,7 +252,7 @@ function ReplayPanel({ result }: { result: ReplayResult }) {
               <th>Term</th>
               <th>Result</th>
               <th>Stored value</th>
-              <th>Extracted value and quote</th>
+              <th>Model's value and quote</th>
               <th>Quote check</th>
             </tr>
           </thead>
@@ -272,11 +267,11 @@ function ReplayPanel({ result }: { result: ReplayResult }) {
                 </td>
                 <td>{r.stored}</td>
                 <td>
-                  {r.extracted}
-                  {r.quote && <div className="cite">“{r.quote}”</div>}
+                  {r.live}
+                  {r.liveQuote && <div className="cite">“{r.liveQuote}”</div>}
                   {r.confidence != null && <div className="muted sm">confidence {Math.round(r.confidence * 100)}%</div>}
                 </td>
-                <td>{r.quote ? r.quoteVerified ? <Badge tone="green">Verbatim</Badge> : <Badge tone="red">Not in document</Badge> : <Badge>Not found</Badge>}</td>
+                <td>{r.liveQuote ? r.quoteVerified ? <Badge tone="green">Verbatim</Badge> : <Badge tone="red">Not in document</Badge> : <Badge>Not found</Badge>}</td>
               </tr>
             ))}
           </tbody>
