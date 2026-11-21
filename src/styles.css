@@ -393,3 +393,16 @@ details.section[open] > summary h3::before { transform: rotate(90deg); }
 .tour-steps button { background: var(--surface); border: 1px solid var(--border); border-radius: 999px; padding: 2px 10px; font-size: 12px; }
 .tour-steps button.on { border-color: var(--accent); color: var(--accent); font-weight: 600; }
 .tour-text { margin: 0; font-size: 13.5px; }
+
+/* ---------- narrow panes: only the queue scrolls sideways ---------- */
+.table-wrap { position: relative; }
+@media (max-width: 640px) {
+  .tbl:not(.queue) th { white-space: normal; }
+  .tbl:not(.queue) td { overflow-wrap: anywhere; }
+  .tbl:not(.queue) { table-layout: fixed; }
+  .case-tbl td { min-width: 0; }
+  .tbl:not(.queue) .days { white-space: normal; }
+  .tbl:not(.queue) th, .tbl:not(.queue) td { padding-left: 5px; padding-right: 5px; }
+  .terms td:nth-child(3) { max-width: none; }
+}
+.queue .badge { white-space: nowrap; }
