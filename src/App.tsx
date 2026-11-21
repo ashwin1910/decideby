@@ -110,7 +110,7 @@ export default function App() {
         {view}
       </main>
       <footer className="foot">
-        Prototype with seeded, synthetic data. Connections to Drive, the mailbox and the ERP are simulated; AI extraction results are pre-computed (no model is called in the demo). Dates
+        Prototype with seeded, synthetic data. Connections to Drive, the mailbox and the ERP are simulated; AI extraction results are pre-computed; “Re-run live” asks the model again. Dates
         are calculated in code.
       </footer>
       <DemoBar />
