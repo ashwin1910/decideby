@@ -3,7 +3,7 @@
 import type { Contract, TermKey } from '../data/types';
 import { TERM_LABEL } from './logic';
 
-export const LIVE_TIMEOUT_MS = 20_000;
+export const LIVE_TIMEOUT_MS = 28_000;
 
 export interface LiveTerm {
   key: TermKey;
@@ -81,7 +81,7 @@ export async function runLiveExtraction(c: Contract, fetchImpl: typeof fetch = f
     if (!Array.isArray(body.terms)) return { ok: false, reason: 'bad response' };
     return { ok: true, model: body.model ?? 'Gemini', rows: diffTerms(c, body.terms), at: new Date() };
   } catch (e) {
-    return { ok: false, reason: ctrl.signal.aborted ? 'timed out after 20 s' : 'network error' };
+    return { ok: false, reason: ctrl.signal.aborted ? 'timed out after 28 s' : 'network error' };
   } finally {
     clearTimeout(timer);
   }
