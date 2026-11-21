@@ -2,7 +2,9 @@ import { useMemo, useState } from 'react';
 import { Badge, Card, Stat, TermStatusBadge, TierBadge } from '../components';
 import { CONTRACTS, COST_CENTRES, INVOICES, SUPPLIERS } from '../data/seed';
 import type { TermKey } from '../data/types';
-import { moneyK, parseQuery, person, supplierOf, TERM_LABEL, termStatus, tierOf } from '../lib/logic';
+import { fmt } from '../lib/dates';
+import { moneyK, person, supplierOf, TERM_LABEL, termStatus, tierOf } from '../lib/logic';
+import { parseQuery, runQuery } from '../lib/search';
 import { useStore } from '../store';
 import { inScope } from './Triage';
 
@@ -11,6 +13,7 @@ const EXAMPLES = [
   "which suppliers can we exit for convenience on 30 days' notice?",
   'software contracts with a price increase over $100k',
   'contracts governed by the law of New York with audit rights',
+  'who owns the Atlas Freight contract and when is it due?',
 ];
 
 export default function Repository() {
@@ -27,9 +30,12 @@ export default function Repository() {
   const covered = scope.filter((s) => s.status === 'contract');
   const gaps = scope.filter((s) => s.status !== 'contract');
 
-  const filters = useMemo(() => parseQuery(asked, now), [asked, now]);
-  const results = useMemo(() => (filters.length ? rows.filter((r) => filters.every((f) => f.test(r.c, r.dr))) : []), [filters, rows]);
+  const parsed = useMemo(() => parseQuery(asked, now), [asked, now]);
+  const { filters, unparsed, show } = parsed;
+  const results = useMemo(() => runQuery(parsed, rows.map((r) => ({ ...r, owner: r.owner.owner, ownerInfo: r.owner }))), [parsed, rows]);
   const citeKeys = [...new Set(filters.map((f) => f.cite))].filter((k) => k !== 'parties') as TermKey[];
+  const cols: TermKey[] = citeKeys.length ? citeKeys : show.owner || show.due ? [] : ['renewal'];
+  const partial = unparsed.length > 0;
 
   const queue = CONTRACTS.flatMap((c) =>
     c.terms
@@ -154,11 +160,32 @@ export default function Repository() {
         </div>
         <div className="row gap wrap sm">
           <span className="muted">Understood as:</span>
-          {filters.length ? filters.map((f) => <Badge key={f.label} tone="blue">{f.label}</Badge>) : <span className="muted">no filters recognised — try one of the examples</span>}
+          {filters.length ? filters.map((f) => <Badge key={f.label} tone="blue">{f.label}</Badge>) : <span className="muted">no filters recognised</span>}
+          {show.owner && <Badge tone="blue">Answer: owner</Badge>}
+          {show.due && <Badge tone="blue">Answer: due dates</Badge>}
+          {partial && (
+            <span className="tone-red" role="status">
+              Couldn't interpret: {unparsed.map((u) => `'${u}'`).join(', ')}
+            </span>
+          )}
         </div>
-        <p className="answer">
-          <b>{results.length}</b> contract{results.length === 1 ? '' : 's'} match.
-        </p>
+        {partial && results.length > 0 ? (
+          <p className="note warn">
+            <b>Partial answer.</b> These {results.length} contracts match only the parts above that were understood — the list ignores {unparsed.map((u) => `'${u}'`).join(', ')}. Rephrase or
+            pick an example to get a full answer.
+          </p>
+        ) : (
+          <p className="answer">
+            {partial && !filters.length ? (
+              <>No answer: the question wasn't understood. Try one of the examples.</>
+            ) : (
+              <>
+                <b>{results.length}</b> contract{results.length === 1 ? '' : 's'} match.
+                {results.length === 0 && filters.some((f) => f.label === 'Liability uncapped') && ' Every contract in the repository has a liability cap.'}
+              </>
+            )}
+          </p>
+        )}
         {results.length > 0 && (
           <div className="table-wrap">
             <table className="tbl">
@@ -167,7 +194,9 @@ export default function Repository() {
                   <th>Supplier</th>
                   <th>Tier</th>
                   <th className="num">Annual</th>
-                  {(citeKeys.length ? citeKeys : (['renewal'] as TermKey[])).map((k) => (
+                  {show.owner && <th>Budget owner</th>}
+                  {show.due && <th>Decide by · notice deadline</th>}
+                  {cols.map((k) => (
                     <th key={k}>{TERM_LABEL[k]} (cited)</th>
                   ))}
                 </tr>
@@ -183,12 +212,24 @@ export default function Repository() {
                       <TierBadge tier={tierOf(r.c)} />
                     </td>
                     <td className="num">{moneyK(supplierOf(r.c).annualSpend)}</td>
-                    {(citeKeys.length ? citeKeys : (['renewal'] as TermKey[])).map((k) => {
+                    {show.owner && (
+                      <td>
+                        <b>{r.owner.name}</b>
+                        <div className="muted sm">{r.owner.title} · {r.ownerInfo.costCentre}</div>
+                      </td>
+                    )}
+                    {show.due && (
+                      <td>
+                        {fmt(r.dr.decideBy)}
+                        <div className="muted sm">{r.dr.noticeDeadline ? `notice by ${fmt(r.dr.noticeDeadline)}` : 'no notice needed'}</div>
+                      </td>
+                    )}
+                    {cols.map((k) => {
                       const t = r.c.terms.find((x) => x.key === k)!;
                       return (
                         <td key={k}>
                           {t.value}
-                          {k === 'notice' && r.dr.noticeDeadline && <div className="sm">Deadline {r.dr.noticeDeadline}</div>}
+                          {k === 'notice' && r.dr.noticeDeadline && <div className="sm">Deadline {fmt(r.dr.noticeDeadline)}</div>}
                           {t.quote && <div className="cite">“{t.quote}”</div>}
                         </td>
                       );
