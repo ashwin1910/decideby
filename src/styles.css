@@ -406,3 +406,4 @@ details.section[open] > summary h3::before { transform: rotate(90deg); }
   .terms td:nth-child(3) { max-width: none; }
 }
 .queue .badge { white-space: nowrap; }
+.doc.prompt { max-height: none; white-space: pre-wrap; }

@@ -2,6 +2,7 @@ import { Badge, Card, Stat } from '../components';
 import { CONTRACTS } from '../data/seed';
 import { diffDays, fmt } from '../lib/dates';
 import { computeDates, moneyK, quoteFound, supplierOf } from '../lib/logic';
+import { SYSTEM, TERM_KEYS, termRequest } from '../lib/prompt';
 import { useStore } from '../store';
 import { northStar } from './Triage';
 
@@ -109,7 +110,7 @@ export default function Evaluation() {
           89–98%.
         </p>
         <p className="muted sm">
-          No accuracy figure is shown here because the extraction run has not been done; the seeded repository uses pre-computed results.
+          Run live on any contract record to see the model's extraction checked against the quotes.
         </p>
         <h4>Quote check across the seeded repository (live)</h4>
         <div className="stats">
@@ -118,6 +119,24 @@ export default function Evaluation() {
           <Stat label="Quote not in document" value={unverified} tone={unverified ? 'bad' : undefined} sub="marked unverified" />
           <Stat label="Not found" value={notFound} sub="sent to the review queue" />
         </div>
+      </Card>
+
+      <Card title="Prompt" aside={<span className="muted sm">Sent by “Re-run live” on a contract record</span>}>
+        <p className="sm">
+          One call per contract family to Google Gemini (the newest Flash-Lite model the key can use, falling back to other Flash models if it is busy). The reply
+          must follow a strict JSON schema; every quote is then checked verbatim against the documents in code, and the dates are calculated in code, not by the
+          model.
+        </p>
+        <h4>System instruction</h4>
+        <pre className="doc prompt">{SYSTEM}</pre>
+        <h4>User message</h4>
+        <pre className="doc prompt">{`<document id="…" kind="signed | amendment" title="…" signed="…">\n…full text of each document in the family…\n</document>\n\n${termRequest()}`}</pre>
+        <h4>Required output (JSON schema)</h4>
+        <pre className="doc prompt">{`{ "terms": [ { "key": one of the ${TERM_KEYS.length} keys above,
+              "value": short plain-English value,
+              "quote": exact sentence from the document, or "" if not found,
+              "docId": id of the document quoted, or "",
+              "confidence": 0 to 1 } ] }`}</pre>
       </Card>
 
       <Card title="North star">
