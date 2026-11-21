@@ -18,6 +18,10 @@ const STAGE_TONE: Record<Stage, string> = {
   escalated: 'amber',
   takeover: 'red',
   overdue: 'red',
+  approval: 'amber',
+  held: 'neutral',
+  ready: 'blue',
+  unsent: 'red',
   decided: 'green',
   missed: 'red',
 };

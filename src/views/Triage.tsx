@@ -9,18 +9,28 @@ export function inScope(s: (typeof SUPPLIERS)[number]) {
   return s.monthsPaid >= 3 || s.annualSpend > 10_000;
 }
 
+export function onTimeAndSent(r: Row): boolean {
+  if (!r.rec || r.rec.decidedOn > r.dr.decideBy || r.stage === 'missed') return false;
+  if (!r.rec.letter) return true;
+  const sent = r.rec.letter.status === 'sent' ? r.rec.letter.sentOn : undefined;
+  if (!sent) return false;
+  const opens = r.dr.windowOpen ?? sent;
+  return sent >= opens && (!r.dr.noticeDeadline || sent <= r.dr.noticeDeadline);
+}
+
 export function northStar(rows: Row[]) {
   // Renewal-eligible = decide-by date falls inside the 90-day pilot.
   const end = addDays(GO_LIVE, 90);
   // Missed auto-renewals always count against the north star.
   const eligible = rows.filter((r) => r.dr.decideBy <= end || r.stage === 'missed');
   const total = eligible.reduce((a, r) => a + supplierOf(r.c).annualSpend, 0);
-  const onTime = eligible.filter((r) => r.rec && r.rec.decidedOn <= r.dr.decideBy && r.stage !== 'missed');
+  // On time = decided before the decide-by date AND, if a notice is needed, sent inside the window.
+  const onTime = eligible.filter((r) => onTimeAndSent(r));
   const done = onTime.reduce((a, r) => a + supplierOf(r.c).annualSpend, 0);
   return { total, done, pct: total ? done / total : 0, n: eligible.length, nDone: onTime.length };
 }
 
-type Filter = 'all' | 'triage' | 'open' | 'decided' | 'missed';
+type Filter = 'all' | 'triage' | 'open' | 'letters' | 'decided' | 'missed';
 
 export default function Triage() {
   const { rows, now, go } = useStore();
@@ -37,14 +47,24 @@ export default function Triage() {
     () =>
       [...rows]
         .filter((r) =>
-          filter === 'triage' ? r.sch.triage : filter === 'open' ? !r.rec && r.stage !== 'missed' : filter === 'decided' ? r.stage === 'decided' : filter === 'missed' ? r.stage === 'missed' : true,
+          filter === 'triage'
+            ? r.sch.triage
+            : filter === 'open'
+              ? !['decided', 'missed', 'held', 'ready', 'approval', 'unsent'].includes(r.stage)
+              : filter === 'letters'
+                ? ['approval', 'held', 'ready', 'unsent'].includes(r.stage)
+                : filter === 'decided'
+                  ? r.stage === 'decided'
+                  : filter === 'missed'
+                    ? r.stage === 'missed'
+                    : true,
         )
         .sort((a, b) => a.dr.decideBy.localeCompare(b.dr.decideBy) || supplierOf(b.c).annualSpend - supplierOf(a.c).annualSpend),
     [rows, filter],
   );
 
   const counts = rows.reduce<Record<Stage, number>>((m, r) => ({ ...m, [r.stage]: (m[r.stage] ?? 0) + 1 }), {} as Record<Stage, number>);
-  const stages: Stage[] = ['scheduled', 'brief', 'reminder', 'escalated', 'takeover', 'overdue', 'missed', 'decided'];
+  const stages: Stage[] = ['scheduled', 'brief', 'reminder', 'escalated', 'takeover', 'overdue', 'approval', 'held', 'ready', 'unsent', 'missed', 'decided'];
 
   return (
     <div className="stack">
@@ -61,7 +81,7 @@ export default function Triage() {
 
       <div className="stats">
         <Stat
-          label="North star · value decided before decide-by"
+          label="North star · value decided on time, notice sent in the window"
           value={`${Math.round(ns.pct * 100)}%`}
           sub={`${moneyK(ns.done)} of ${moneyK(ns.total)} due in the 90-day pilot (${ns.nDone}/${ns.n} contracts)`}
           tone="accent"
@@ -89,9 +109,9 @@ export default function Triage() {
         title="Renewal queue"
         aside={
           <div className="seg">
-            {(['open', 'triage', 'missed', 'decided', 'all'] as Filter[]).map((f) => (
+            {(['open', 'letters', 'triage', 'missed', 'decided', 'all'] as Filter[]).map((f) => (
               <button key={f} className={filter === f ? 'on' : ''} onClick={() => setFilter(f)}>
-                {{ open: 'Undecided', triage: 'Triage', missed: 'Missed', decided: 'Decided', all: 'All' }[f]}
+                {{ open: 'Undecided', letters: 'Letters', triage: 'Triage', missed: 'Missed', decided: 'Decided', all: 'All' }[f]}
               </button>
             ))}
           </div>

@@ -104,13 +104,14 @@ export default function Case() {
 
       <Card title="4 · Success metrics">
         <p>
-          <b>North star:</b> the share of renewal-eligible contract value decided before its decide-by date. All targets are hypotheses for a 90-day pilot.
+          <b>North star:</b> the share of renewal-eligible contract value decided before its decide-by date <i>and</i>, where a notice is needed, with the notice
+          sent inside its valid window. A decision whose letter never goes out does not count. All targets are hypotheses for a 90-day pilot.
         </p>
         <T
           head={['By', 'Target']}
           rows={[
             ['Day 30', 'Every triage contract has a budget owner and a brief; 80% of in-scope suppliers covered'],
-            ['Day 60', '80% of triage contract value decided before its decide-by date; zero too-late deadlines found by Legal'],
+            ['Day 60', '80% of triage contract value decided on time with notices sent in the window; zero too-late deadlines found by Legal'],
             ['Day 90', '90% of value due in the period decided on time; first outcomes and savings recorded'],
           ]}
         />

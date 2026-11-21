@@ -128,14 +128,14 @@ export default function Evaluation() {
       <Card title="North star">
         <div className="stats">
           <Stat
-            label="Share of renewal-eligible value decided before its decide-by date"
+            label="Share of renewal-eligible value decided before its decide-by date, with any notice sent inside the window"
             value={`${Math.round(ns.pct * 100)}%`}
             sub={`${moneyK(ns.done)} of ${moneyK(ns.total)} · ${ns.nDone} of ${ns.n} contracts due in the 90-day pilot`}
             tone="accent"
           />
         </div>
         <p className="muted sm">
-          Weighted by value, so one $500k contract counts more than fifty $2k ones. Today's baseline is unknown because nobody measures it — that gap is itself a
+          A decision only counts once its notice (if one is needed) has left inside the valid window, and missed auto-renewals always count against it. Weighted by value, so one $500k contract counts more than fifty $2k ones. Today's baseline is unknown because nobody measures it — that gap is itself a
           finding. Pilot targets: 80% of triage value by day 60; 90% of value due by day 90.
         </p>
       </Card>

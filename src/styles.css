@@ -172,13 +172,16 @@ nav button.on { background: var(--surface); color: var(--text); box-shadow: var(
 .seg button.on { background: var(--surface); color: var(--text); box-shadow: var(--shadow); }
 
 /* ---------- pipeline ---------- */
-.pipeline { display: grid; grid-template-columns: repeat(8, 1fr); gap: 8px; }
+.pipeline { display: grid; grid-template-columns: repeat(auto-fit, minmax(92px, 1fr)); gap: 8px; }
 .pipe { border-radius: 10px; padding: 10px 12px; background: var(--surface-2); }
 .pipe-n { font-size: 22px; font-weight: 650; font-variant-numeric: tabular-nums; }
 .pipe-l { font-size: 12px; color: var(--muted); }
 .pipe-escalated .pipe-n, .pipe-reminder .pipe-n { color: var(--amber); }
 .pipe-takeover .pipe-n, .pipe-overdue .pipe-n, .pipe-missed .pipe-n { color: var(--red); }
 .pipe-missed { background: var(--red-soft); }
+.pipe-unsent .pipe-n { color: var(--red); }
+.pipe-ready .pipe-n { color: var(--accent); }
+.pipe-approval .pipe-n { color: var(--amber); }
 .pipe-decided .pipe-n { color: var(--green); }
 .pipe-brief .pipe-n { color: var(--accent); }
 
@@ -251,7 +254,6 @@ nav button.on { background: var(--surface); color: var(--text); box-shadow: var(
 
 @media (max-width: 860px) {
   .two { grid-template-columns: 1fr; }
-  .pipeline { grid-template-columns: repeat(4, 1fr); }
   .choices { grid-template-columns: repeat(2, 1fr); }
   .letter-steps, .kv.three { grid-template-columns: 1fr; }
   .kinds { grid-template-columns: repeat(2, 1fr); }

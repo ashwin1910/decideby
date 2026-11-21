@@ -117,7 +117,12 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         const rec = records[b.c.id];
         const decided = !!rec && rec.decidedOn <= now;
         const sent = rec?.letter?.status === 'sent' && rec.letter.sentOn && rec.letter.sentOn <= now ? rec.letter.sentOn : undefined;
-        const stage = stageAt(b.sch, b.dr, now, decided ? { decision: rec.decision, decidedOn: rec.decidedOn, sentOn: sent } : undefined);
+        const stage = stageAt(
+          b.sch,
+          b.dr,
+          now,
+          decided ? { decision: rec.decision, decidedOn: rec.decidedOn, sentOn: sent, letterStatus: rec.letter?.status } : undefined,
+        );
         return { ...b, rec: decided ? rec : undefined, stage };
       }),
     [records, now],

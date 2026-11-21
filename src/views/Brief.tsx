@@ -9,6 +9,8 @@ import {
   person,
   rateCheck,
   recommend,
+  unsentEscalationDate,
+  UNSENT_ESCALATION_BUSINESS_DAYS,
   DECISION_LABEL,
   supplierOf,
   TERM_LABEL,
@@ -356,6 +358,18 @@ export default function Brief({ id }: { id: string }) {
             </p>
           ) : (
             <>
+              {r.stage === 'ready' && (
+                <div className="note ok" role="status">
+                  <b>Ready to send.</b> The window opened on {fmt(dr.windowOpen)} and closes on {fmt(dr.noticeDeadline)}. If it is still unsent on{' '}
+                  {fmt(unsentEscalationDate(dr))} it is escalated.
+                </div>
+              )}
+              {r.stage === 'unsent' && (
+                <div className="note bad" role="alert">
+                  <b>Escalated: the letter is still unsent</b> {UNSENT_ESCALATION_BUSINESS_DAYS} business days before the window closes on {fmt(dr.noticeDeadline)}.
+                  Escalated to {person('p-proc')!.name} (Procurement){tier !== 'small' && r.owner.manager ? ` and ${r.owner.manager.name}` : ''}.
+                </div>
+              )}
               <pre className="letter">{letterText(c, dr, rec.decision, rec.letter.sentOn ?? now, rec.letter.tracking)}</pre>
               <div className="letter-steps">
                 <div className={`ls ${rec.letter.status !== 'drafted' ? 'ok' : ''}`}>

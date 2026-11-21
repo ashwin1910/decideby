@@ -260,7 +260,22 @@ export function scheduleOf(c: Contract, dr: DateResult): Schedule {
   return { triage: false, milestones: ms };
 }
 
-export type Stage = 'scheduled' | 'brief' | 'reminder' | 'escalated' | 'takeover' | 'overdue' | 'decided' | 'missed';
+export type Stage =
+  | 'scheduled'
+  | 'brief'
+  | 'reminder'
+  | 'escalated'
+  | 'takeover'
+  | 'overdue'
+  | 'approval'
+  | 'held'
+  | 'ready'
+  | 'unsent'
+  | 'decided'
+  | 'missed';
+
+/** A letter still unsent this many business days before the window closes is escalated. */
+export const UNSENT_ESCALATION_BUSINESS_DAYS = 5;
 
 export const STAGE_LABEL: Record<Stage, string> = {
   scheduled: 'Scheduled',
@@ -269,6 +284,10 @@ export const STAGE_LABEL: Record<Stage, string> = {
   escalated: 'Escalated to manager',
   takeover: 'Procurement took over',
   overdue: 'Past decide-by',
+  approval: 'Letter awaiting approval',
+  held: 'Letter held',
+  ready: 'Ready to send',
+  unsent: 'Unsent letter escalated',
   decided: 'Decided',
   missed: 'Auto-renewed (missed)',
 };
@@ -279,7 +298,12 @@ export interface StageDecision {
   decidedOn: ISODate;
   /** date a valid notice left (email sent / letter dispatched), if it has */
   sentOn?: ISODate;
+  /** set when the decision needs a notice to the supplier */
+  letterStatus?: 'drafted' | 'approved' | 'packed' | 'sent';
 }
+
+export const unsentEscalationDate = (dr: DateResult): ISODate | null =>
+  dr.noticeDeadline ? subBusinessDaysDetail(dr.noticeDeadline, UNSENT_ESCALATION_BUSINESS_DAYS).date : null;
 
 /** True when the notice deadline (or window close) has passed without a valid notice or a timely decision to renew. */
 export function isMissed(dr: DateResult, now: ISODate, d?: StageDecision): boolean {
@@ -291,7 +315,14 @@ export function isMissed(dr: DateResult, now: ISODate, d?: StageDecision): boole
 
 export function stageAt(sch: Schedule, dr: DateResult, now: ISODate, d?: StageDecision): Stage {
   if (isMissed(dr, now, d)) return 'missed';
-  if (d) return 'decided';
+  if (d) {
+    if (!d.letterStatus || d.sentOn) return 'decided';
+    const esc = unsentEscalationDate(dr);
+    if (esc && now >= esc) return 'unsent';
+    if (d.letterStatus === 'drafted') return 'approval';
+    if (dr.windowOpen && now < dr.windowOpen) return 'held';
+    return 'ready';
+  }
   if (now > dr.decideBy) return 'overdue';
   // latest escalation step already reached, by date (not by list order)
   const rank: Record<Milestone['key'], number> = { brief: 1, reminder: 2, escalate: 3, takeover: 4, decideBy: 0 };
