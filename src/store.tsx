@@ -56,7 +56,13 @@ export interface OwnerOverride {
   on: ISODate;
 }
 
+export type Role = 'procurement' | 'owner' | 'legal';
+/** The budget owner the "Budget owner" view acts as. */
+export const OWNER_VIEW_ID = 'p-ops';
+
 interface Store {
+  role: Role;
+  setRole: (r: Role) => void;
   owners: Record<string, OwnerOverride>;
   reassign: (id: string, o: OwnerOverride | undefined) => void;
   credits: Record<string, CreditRequest>;
@@ -122,6 +128,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const [route, setRoute] = useState(parseHash);
   // Bumped by Reset so every view remounts and drops its local state too.
   const [epoch, setEpoch] = useState(0);
+  const [role, setRole] = useState<Role>('procurement');
 
   useEffect(() => {
     const f = () => {
@@ -169,6 +176,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   );
 
   const value: Store = {
+    role,
+    setRole,
     owners,
     reassign: (id, o) =>
       setOwners((prev) => {
@@ -202,6 +211,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       setCredits({});
       setOwners({});
       setOffset(0);
+      setRole('procurement');
       setEpoch((e) => e + 1);
       if (location.hash !== '#/triage') location.hash = '#/triage';
     },

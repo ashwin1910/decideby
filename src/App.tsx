@@ -1,13 +1,14 @@
 import { GO_LIVE } from './data/seed';
 import { addBusinessDays, diffDays, fmtWd } from './lib/dates';
 import { useState } from 'react';
-import { useStore } from './store';
+import { useStore, type Role } from './store';
 import Brief from './views/Brief';
 import Case from './views/Case';
 import ContractRecord from './views/ContractRecord';
 import Evaluation from './views/Evaluation';
 import Repository from './views/Repository';
 import Triage from './views/Triage';
+import LegalHome from './views/LegalHome';
 
 const NAV = [
   ['triage', 'Triage'],
@@ -61,7 +62,7 @@ function DemoBar() {
 }
 
 export default function App() {
-  const { route, go, now } = useStore();
+  const { route, go, now, role, setRole } = useStore();
   const [page, id] = route;
   let view;
   if (page === 'contract' && id) view = <ContractRecord id={id} />;
@@ -69,7 +70,7 @@ export default function App() {
   else if (page === 'repository') view = <Repository />;
   else if (page === 'evaluation') view = <Evaluation />;
   else if (page === 'case') view = <Case />;
-  else view = <Triage />;
+  else view = role === 'legal' ? <LegalHome /> : <Triage />;
   const active = page === 'contract' || page === 'brief' ? 'triage' : page;
 
   return (
@@ -85,10 +86,18 @@ export default function App() {
             <nav>
               {NAV.map(([k, l]) => (
                 <button key={k} className={active === k ? 'on' : ''} onClick={() => go(k)} aria-current={active === k ? 'page' : undefined}>
-                  {l}
+                  {k === 'triage' ? { procurement: 'Triage', owner: 'My renewals', legal: 'Legal inbox' }[role] : l}
                 </button>
               ))}
             </nav>
+            <label className="role">
+              <span>Viewing as</span>
+              <select value={role} onChange={(e) => setRole(e.target.value as Role)} aria-label="Viewing as">
+                <option value="procurement">Procurement (Casey)</option>
+                <option value="owner">Budget owner (Dana)</option>
+                <option value="legal">Legal (Avery)</option>
+              </select>
+            </label>
             <span className="date-badge" title="Simulated date (change it in the demo controls)">
               {fmtWd(now)}
             </span>

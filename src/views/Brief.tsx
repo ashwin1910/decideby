@@ -18,7 +18,7 @@ import {
   type Decision,
   type DateResult,
 } from '../lib/logic';
-import { useStore, type DecisionRecord, type Row } from '../store';
+import { OWNER_VIEW_ID, useStore, type DecisionRecord, type Row } from '../store';
 
 const ACTIONS: { k: Decision; label: string; desc: string }[] = [
   { k: 'renew', label: 'Renew', desc: 'Keep it as is' },
@@ -87,12 +87,25 @@ ${letterFooter(c, tracking)}`;
 }
 
 export default function Brief({ id }: { id: string }) {
-  const { rows, now, go, records, setRecord } = useStore();
+  const { rows, now, go, records, setRecord, role } = useStore();
   const r = rows.find((x) => x.c.id === id);
   const [choice, setChoice] = useState<Decision | null>(null);
   const [reason, setReason] = useState('');
   if (!r) return <p>Contract not found.</p>;
   const { c, dr, owner } = r;
+  if (role === 'owner' && owner.owner.id !== OWNER_VIEW_ID)
+    return (
+      <div className="stack">
+        <Card title="Not your brief">
+          <p>
+            This brief belongs to <b>{owner.owner.name}</b>. Viewing as {person(OWNER_VIEW_ID)!.name}, you see only the briefs for contracts you own.
+          </p>
+          <button type="button" className="primary sm" onClick={() => go('triage')}>
+            Back to my renewals
+          </button>
+        </Card>
+      </div>
+    );
   const rec = records[c.id];
   const s = supplierOf(c);
   const tier = tierOf(c);

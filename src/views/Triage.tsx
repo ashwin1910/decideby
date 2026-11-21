@@ -1,9 +1,9 @@
 import { useMemo, useState } from 'react';
 import { Card, DaysLeft, StageBadge } from '../components';
-import { CONTRACTS, GO_LIVE, SUPPLIERS } from '../data/seed';
+import { GO_LIVE, SUPPLIERS } from '../data/seed';
 import { addDays, diffDays, fmt } from '../lib/dates';
-import { DECISION_LABEL, money, moneyK, rateCheck, STAGE_LABEL, supplierOf, TIER_LABEL, tierOf, TYPE_LABEL, type Stage } from '../lib/logic';
-import { useStore, type Row } from '../store';
+import { DECISION_LABEL, person, money, moneyK, rateCheck, STAGE_LABEL, supplierOf, TIER_LABEL, tierOf, TYPE_LABEL, type Stage } from '../lib/logic';
+import { OWNER_VIEW_ID, useStore, type Row } from '../store';
 
 export function inScope(s: (typeof SUPPLIERS)[number]) {
   return s.monthsPaid >= 3 || s.annualSpend > 10_000;
@@ -50,15 +50,18 @@ export function needsAction(r: Row, now: string): boolean {
 const SEGMENT_ORDER: Stage[] = ['missed', 'overdue', 'takeover', 'unsent', 'escalated', 'reminder', 'brief', 'approval', 'ready', 'held', 'scheduled', 'decided'];
 
 export default function Triage() {
-  const { rows, now, go } = useStore();
+  const { rows: allRows, now, go, role } = useStore();
   const [filter, setFilter] = useState<Filter>('action');
+  // A budget owner sees only the renewals they own.
+  const rows = role === 'owner' ? allRows.filter((r) => r.owner.owner.id === OWNER_VIEW_ID) : allRows;
+  const ownerName = role === 'owner' ? person(OWNER_VIEW_ID)!.name : null;
 
   const week1 = rows.filter((r) => diffDays(r.dr.decideBy, GO_LIVE) <= 45);
   const week1Value = week1.reduce((a, r) => a + supplierOf(r.c).annualSpend, 0);
   const ns = northStar(rows);
   const scope = SUPPLIERS.filter(inScope);
   const covered = scope.filter((s) => s.status === 'contract');
-  const over = CONTRACTS.reduce((a, c) => a + rateCheck(c).total, 0);
+  const over = rows.reduce((a, r) => a + rateCheck(r.c).total, 0);
   const actionCount = rows.filter((r) => needsAction(r, now)).length;
 
   const sorted = useMemo(
@@ -94,13 +97,14 @@ export default function Triage() {
     <div className="stack">
       <div className="hero">
         <div className="hero-top">
-          <p className="eyebrow">First-week triage · go-live {fmt(GO_LIVE)}</p>
+          <p className="eyebrow">{ownerName ? `My renewals · ${ownerName}` : `First-week triage · go-live ${fmt(GO_LIVE)}`}</p>
           <button type="button" className="link sm" onClick={() => go('case')}>
             Read the case →
           </button>
         </div>
         <h1>
-          Week 1: <span className="hl">{week1.length} contracts</span> worth <span className="hl">{moneyK(week1Value)}</span> a year must be decided within 45 days.
+          {ownerName ? 'Your renewals: ' : 'Week 1: '}
+          <span className="hl">{week1.length} contracts</span> worth <span className="hl">{moneyK(week1Value)}</span> a year must be decided within 45 days.
         </h1>
         <p className="muted">
           Ranked by days left to the decide-by date, then by value. Contracts already inside their lead time run on the short triage schedule: brief on day 0,

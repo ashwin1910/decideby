@@ -1,12 +1,13 @@
 import { useMemo, useState } from 'react';
-import { Badge, Card, Stat, TermStatusBadge, TierBadge } from '../components';
+import { Badge, Card, Stat, TierBadge } from '../components';
 import { CONTRACTS, COST_CENTRES, INVOICES, SUPPLIERS } from '../data/seed';
 import type { TermKey } from '../data/types';
 import { fmt } from '../lib/dates';
-import { ACTION_TERMS, moneyK, person, supplierOf, TERM_LABEL, termStatus, tierOf } from '../lib/logic';
+import { moneyK, person, supplierOf, TERM_LABEL, tierOf } from '../lib/logic';
 import { parseQuery, runQuery } from '../lib/search';
 import { useStore } from '../store';
 import { inScope } from './Triage';
+import LegalQueue from './LegalQueue';
 
 const EXAMPLES = [
   'auto-renewing staffing contracts over $50k with notice deadlines in the next 90 days',
@@ -22,7 +23,6 @@ export default function Repository() {
   const [asked, setAsked] = useState(EXAMPLES[0]);
   const [connected, setConnected] = useState(true);
   const [syncing, setSyncing] = useState(false);
-  const [confirmed, setConfirmed] = useState<Record<string, boolean>>({});
 
   const docs = CONTRACTS.flatMap((c) => c.docs);
   const byKind = (k: string) => docs.filter((d) => d.kind === k).length + (k === 'draft' ? SUPPLIERS.filter((s) => s.draftDoc).length : 0);
@@ -36,14 +36,6 @@ export default function Repository() {
   const citeKeys = [...new Set(filters.map((f) => f.cite))].filter((k) => k !== 'parties') as TermKey[];
   const cols: TermKey[] = citeKeys.length ? citeKeys : show.owner || show.due ? [] : ['renewal'];
   const partial = unparsed.length > 0;
-
-  // Every term that isn't plainly trusted...
-  const flagged = rows.flatMap((r) => r.c.terms.map((t) => ({ r, c: r.c, t, s: termStatus(r.c, t.key) })).filter((x) => x.s !== 'trusted'));
-  // ...but Legal reviews only the documented rule: a term that triggers an action AND is low-confidence or on a large contract.
-  const inRule = (x: (typeof flagged)[number]) => ACTION_TERMS.includes(x.t.key) && (x.t.confidence < 0.8 || tierOf(x.c) === 'large');
-  const byDeadline = (a: (typeof flagged)[number], b: (typeof flagged)[number]) => a.r.dr.decideBy.localeCompare(b.r.dr.decideBy) || a.t.confidence - b.t.confidence;
-  const queue = flagged.filter(inRule).sort(byDeadline);
-  const outside = flagged.filter((x) => !inRule(x)).sort(byDeadline);
 
   const ownerOf = (sid: string) => {
     const s = SUPPLIERS.find((x) => x.id === sid)!;
@@ -247,86 +239,7 @@ export default function Repository() {
         </p>
       </Card>
 
-      <Card
-        title={`Legal review queue · ${queue.length} terms`}
-        aside={
-          <span className="muted sm">
-            {flagged.length} flagged → {queue.length} after the rule: action terms that are low-confidence or on a large contract. Sorted by days to decide-by.
-          </span>
-        }
-      >
-        <div className="table-wrap">
-          <table className="tbl">
-            <thead>
-              <tr>
-                <th>Supplier</th>
-                <th>Term</th>
-                <th>Why it's here</th>
-                <th>Quote</th>
-                <th />
-              </tr>
-            </thead>
-            <tbody>
-              {queue.map(({ r, c, t, s }) => {
-                const k = c.id + t.key;
-                return (
-                  <tr key={k}>
-                    <td>
-                      <button className="link" onClick={() => go('contract/' + c.id)}>
-                        {supplierOf(c).name}
-                      </button>
-                      <div className="row gap">
-                        <TierBadge tier={tierOf(c)} />
-                        <span className="muted sm">decide by {fmt(r.dr.decideBy)}</span>
-                      </div>
-                    </td>
-                    <td>{TERM_LABEL[t.key]}</td>
-                    <td>
-                      <TermStatusBadge s={s} />
-                      <div className="muted sm">
-                        {s === 'notFound'
-                          ? '"Not found" goes to review, never into silence'
-                          : s === 'unverified'
-                            ? 'Quoted text does not appear in the contract'
-                            : t.confidence < 0.8
-                              ? `Low confidence (${Math.round(t.confidence * 100)}%) on an action term`
-                              : 'Action term on a large contract'}
-                      </div>
-                    </td>
-                    <td className="sm">{t.quote ? <q>{t.quote}</q> : '—'}</td>
-                    <td>
-                      {confirmed[k] ? (
-                        <Badge tone="green">Verified</Badge>
-                      ) : (
-                        <button className="ghost sm" onClick={() => setConfirmed({ ...confirmed, [k]: true })}>
-                          Verify
-                        </button>
-                      )}
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-        {outside.length > 0 && (
-          <details className="outside">
-            <summary>
-              {outside.length} quote problems outside the rule (not-found or not-verbatim on terms that trigger no action) — kept visible, not sent to Legal
-            </summary>
-            <ul>
-              {outside.map(({ c, t, s }) => (
-                <li key={c.id + t.key}>
-                  <button className="link" onClick={() => go('contract/' + c.id)}>
-                    {supplierOf(c).name}
-                  </button>{' '}
-                  · {TERM_LABEL[t.key]} · <TermStatusBadge s={s} />
-                </li>
-              ))}
-            </ul>
-          </details>
-        )}
-      </Card>
+      <LegalQueue />
     </div>
   );
 }
